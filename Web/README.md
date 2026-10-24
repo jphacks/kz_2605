@@ -1,41 +1,50 @@
-# おとぎ配信 視聴ページ
+# おとぎ配信 視聴ページ・配信サーバー
 
-VRで絵本の世界に入った体験者の様子を、スマホやPCのブラウザでリアルタイムに見て、選択肢に投票・コメントできるページです。
-Unity（Quest）と視聴ページは Firebase Realtime Database でつながります。
+VRで絵本の世界に入った体験者の様子を、スマホやPCのブラウザでリアルタイムに見て、選択肢に投票・コメントできます。
+配信サーバーは **サーバー役のPC 1台**（Quest や開発用PCとは別のPCでよい）で動かします。
 
 ```
-Quest（Unity）──REST──▶ Firebase Realtime Database ◀──JS SDK── 視聴ページ（スマホ・PC）
-  場面・字幕・選択肢・VR視点の画像を書く          投票・コメント・視聴者数を書く
-  投票・コメント・視聴者数を読む                  すべてをリアルタイムに表示
+Quest（Unity）──HTTP──▶ サーバー役のPC（node server.js）◀──ブラウザ── スマホ・PC
+  場面・字幕・選択肢・VR視点の画像を送る       視聴ページを配信      見る・投票する・コメントする
+  投票・コメント・視聴者数を受け取る           変更をリアルタイムに中継
 ```
 
-## セットアップ
+## サーバー役のPCの準備
 
-1. [Firebase コンソール](https://console.firebase.google.com/) でプロジェクトを作り、**Realtime Database** を作成する（場所はシンガポールなど近いところ）。
-2. Realtime Database の URL（`https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app` など）を控える。
-3. `Web/public/config.js` の `DATABASE_URL` をその URL に書き換える。
-4. ルールと視聴ページを公開する（[Firebase CLI](https://firebase.google.com/docs/cli) が必要：`npm install -g firebase-tools`）。
+1. [Node.js](https://nodejs.org/)（18 以上）を入れる。追加のパッケージは不要です。
+2. この `Web` フォルダーをまるごと、サーバー役のPCにコピーする（リポジトリを clone してもよい）。
+3. 起動する。
+   - Windows：`start-server.bat` をダブルクリック
+   - Mac / Linux：`Web` フォルダーで `node server.js`
+   - ポートを変えるとき：`node server.js 8081`
+4. 画面に出る「スマホ・Questから : http://192.168.x.x:8080」を控える。
+   - Windows で「ファイアウォールでブロックされています」と出たら、**プライベートネットワーク** で許可する。
 
-   ```sh
-   cd Web
-   firebase login
-   firebase use --add        # 作ったプロジェクトを選ぶ
-   firebase deploy           # database.rules.json と視聴ページを公開
-   ```
+データはメモリ上だけに持ちます（サーバーを止めるとコメントなどは消えます）。配信中はPCを起動したままにしてください。
 
-   公開されたページ：`https://<プロジェクトID>.web.app/`
-5. Unity のメニュー **JPHACKS2026 > Live Stream Config** を開き、
-   - `Database Url` に手順2の URL を入れる（空のあいだは配信は無効で、ゲームは今まで通り動く）
-   - `Viewer Page Url` に手順4の公開URLを入れる（タイトル画面に「スマホで見る：URL」が出る）
-6. Quest にビルドして起動する。
+## Unity（Quest）の設定
+
+1. メニュー **JPHACKS2026 > Live Stream Config** を開く。
+2. `Database Url` に、控えたURL（`http://192.168.x.x:8080`）を入れる。`Viewer Page Url` は空でよい。
+   - `http://` のURLを入れると、Quest から http 通信できるよう Player Settings の
+     「Allow downloads over HTTP」が自動で Always allowed になります。
+   - URLが空のあいだは配信は無効で、ゲームは今まで通り動きます。
+3. Quest にビルドして起動する。タイトル画面に「スマホで見る：URL」が出ます。
 
 ## スマホで見る
 
-- 公開URL（`https://<プロジェクトID>.web.app/`）をスマホで開くだけ。モバイル回線でも見られます。
-- PC で開いて右上の「スマホで見る」を押すと QR コードが出ます。
+- スマホを **サーバー役のPCと同じWi-Fi** につなぎ、`http://192.168.x.x:8080` を開く。
+- サーバー役のPCで `http://localhost:8080` を開き、右上の「スマホで見る」を押すとQRコードが出ます
+  （QRコードの表示にはインターネット接続が必要です。つながっていなければURLだけ出ます）。
 - ルームを分けるときは `?room=xxx`（Unity の `Room Id` と合わせる）。
 
-手元で試すだけなら、`Web/public` で `npx serve` などを起動して開けば動きます（`file://` では ES Modules が読めません）。
+## つながらないとき
+
+- Quest・スマホ・サーバー役のPCが **同じネットワーク** にいるか確認する。
+  学内Wi-Fiなどは端末どうしの通信が禁止されていることがあります。そのときはスマホのテザリングや
+  持ち込みのWi-Fiルーターに全員をつなぐ。
+- サーバー役のPCのファイアウォールで、`node` の受信が許可されているか確認する。
+- サーバー役のPCのIPアドレスはネットワークが変わると変わります。起動時の表示を見て、Unity の `Database Url` を合わせる。
 
 ## 選択肢の決まり方
 
@@ -44,26 +53,27 @@ Quest（Unity）──REST──▶ Firebase Realtime Database ◀──JS SDK�
 - 投票が1つも無ければ、これまで通りの「時間切れ」。
 - コメントに選択肢の名前（例：「助ける」）が入っていると、その選択肢に1票入る。
 
-## データの形（`rooms/{roomId}/`）
+## 通信の中身（`/rooms/{room}/...`）
+
+サーバーは Firebase Realtime Database の REST と同じ形で読み書きできます（`.json` 付きのパスに `PUT` / `PATCH` / `POST` / `GET`。
+`PATCH` のキーに `state/phase` のような複数階層のパスを書ける。`Accept: text/event-stream` で GET するとストリーミング）。
 
 | パス | 書く人 | 中身 |
 |---|---|---|
 | `state` | Unity | `phase`（title/story/ending/ended。ended で「ご視聴ありがとうございました。」）、`area` / `areaName`、`subtitle`（speaker, text） |
-| `frame` | Unity | VR視点の画像（JPEG の base64）。既定は1秒ごと・480×270 |
+| `frame` | Unity | VR視点の画像（JPEG の base64） |
 | `choice` | Unity | `id`, `question`, `options`[label, hint], `timeLimit`, `remaining`, `status`（open/closed）, `result`, `decidedBy`（player/viewers/timeout） |
-| `audience/votes/{choiceId}/{viewerId}` | 視聴ページ | 選んだ選択肢の番号 |
-| `audience/comments/{pushId}` | 視聴ページ | `name`, `text`（60文字まで）, `t` |
-| `audience/viewers/{viewerId}` | 視聴ページ | 接続中だけ存在（切断で自動削除）。この数が視聴者数 |
 | `ending` | Unity | 到達したエンディング |
+| `audience/votes/{choiceId}/{viewerId}` | 視聴ページ | 選んだ選択肢の番号（0〜5） |
+| `audience/comments/{key}` | 視聴ページ（POST） | `name`（20文字まで）, `text`（60文字まで）, `t` |
+| `audience/viewers/{viewerId}` | サーバー | 視聴ページがつながっている間だけ存在。この数が視聴者数 |
 
-Unity は、送る変更をためて1本の PATCH（複数パス同時更新）にまとめて送り、`audience` だけをストリーミング（Server-Sent Events）で受け取ります。
-回線が遅くても遅れが溜まりません。
+## Firebase に戻すとき
+
+同じ視聴ページは Firebase でも動きます（`backend.js` が開いた場所で自動的に切り替える）。
+`public/config.js` の `DATABASE_URL` に Firebase の URL を入れ、`firebase deploy` で公開し、
+Unity の `Database Url` を Firebase の URL に、`Viewer Page Url` を公開URL（`https://<プロジェクトID>.web.app`）にする。
 
 ## 注意
 
-- ルールは**ハッカソン用**で、Unity が書く場所（state / frame / choice / ending）は誰でも書けます。
-  一般公開するなら Firebase Authentication（匿名ログイン）で配信者だけが書けるようにしてください。
-- 画像は Realtime Database 経由で送っているので、視聴者が多いと通信量（無料枠：月10GB）を使います。
-  `Live Stream Config` の `Frame Interval`（間隔）・解像度・画質で調整できます。
-- Quest をプロキシのあるネットワーク（学内Wi-Fiなど）につなぐと、Firebase に届かないことがあります。
-  そのときはテザリングなど、プロキシの無い回線を使ってください。
+- 同じネットワークの中でだけ使う前提で、認証はありません。インターネットに公開しないでください。

@@ -12,12 +12,12 @@ namespace JPHACKS2026
     {
         [Tooltip("配信を有効にする")]
         public bool streamEnabled = true;
-        [Tooltip("Firebase Realtime Database のURL（例：https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app）")]
+        [Tooltip("配信サーバーのURL。サーバー役のPC（Web/server.js）なら例：http://192.168.1.10:8080 。Firebase Realtime Database のURLでもよい")]
         [FormerlySerializedAs("serverUrl")]
         public string databaseUrl = "";
         [Tooltip("配信ルームのID。視聴ページの ?room= と合わせる（既定は main）")]
         public string roomId = "main";
-        [Tooltip("視聴ページのURL（Firebase Hosting で公開したURL。例：https://xxxx.web.app）。タイトル画面に表示する")]
+        [Tooltip("視聴ページのURL（タイトル画面に表示する）。空なら、サーバー役のPCのURL（Database Url）をそのまま表示する")]
         public string viewerPageUrl = "";
 
         /// <summary>タイトル画面に出す視聴ページのURL（未設定なら空）。</summary>
@@ -26,6 +26,7 @@ namespace JPHACKS2026
             get
             {
                 string url = viewerPageUrl.Trim();
+                if (url.Length == 0 && databaseUrl.Trim().StartsWith("http://")) url = databaseUrl.Trim();   // サーバー役のPCは視聴ページも配信している
                 if (url.Length == 0 || roomId == "main" || url.Contains("?")) return url;
                 return url.TrimEnd('/') + "/?room=" + roomId;
             }

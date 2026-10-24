@@ -1,16 +1,11 @@
-// おとぎ配信 視聴ページ。Firebase Realtime Database からリアルタイムに受け取り、投票・コメントを書き込む。
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getDatabase, ref, onValue, onChildAdded, set, push, query, limitToLast,
-  serverTimestamp, onDisconnect, off,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { DATABASE_URL, DEFAULT_ROOM } from "./config.js";
+// おとぎ配信 視聴ページ。サーバー役のPC（server.js）か Firebase からリアルタイムに受け取り、投票・コメントを書き込む。
+// どちらにつなぐかは backend.js が開いた場所から自動で決める。
+import { connect } from "./backend.js";
+import { DEFAULT_ROOM } from "./config.js";
 
 // ── 準備 ────────────────────────────────────
 const params = new URLSearchParams(location.search);
 const room = (params.get("room") || DEFAULT_ROOM).replace(/[.#$\[\]\/\\]/g, "");
-const db = getDatabase(initializeApp({ databaseURL: DATABASE_URL }));
-const roomRef = (path) => ref(db, `rooms/${room}/${path}`);
 const $ = (id) => document.getElementById(id);
 
 function load(key, fallback) {
@@ -26,44 +21,41 @@ const viewerId = load("otogi.viewerId", null) || (() => {
   return id;
 })();
 
-// ── Firebase の内容を手元の data に写して描画する ─────────
+const backend = await connect(room);
+
+// ── 受け取った内容を手元の data に写して描画する ─────────
 // 視聴者が書く場所（投票・コメント・視聴者数）は audience/ の下にまとめる（Unity はここだけをストリーミングで受け取る）
 const data = {};
 let connected = false;
-let serverOffset = 0;   // 端末の時計とサーバーの時計の差
-const serverNow = () => Date.now() + serverOffset;
-onValue(ref(db, ".info/serverTimeOffset"), (snap) => { serverOffset = snap.val() || 0; });
+const serverNow = () => backend.serverNow();
 
-// 視聴者数：つながっている間だけ audience/viewers に自分を書き、切断で自動的に消える
+// 視聴者数：つながっている間だけ audience/viewers に自分が入る
 let disconnectedSince = Date.now();
-onValue(ref(db, ".info/connected"), (snap) => {
-  connected = !!snap.val();
+backend.onConnected((ok) => {
+  connected = ok;
   if (!connected) disconnectedSince = Date.now();
   updateLive();
-  if (!connected) return;
-  const me = roomRef(`audience/viewers/${viewerId}`);
-  onDisconnect(me).remove().then(() => set(me, serverTimestamp()));
 });
+backend.registerViewer(viewerId);
 
 for (const [key, path] of [["viewers", "audience/viewers"], ["frame", "frame"], ["state", "state"], ["ending", "ending"], ["choice", "choice"]]) {
-  onValue(roomRef(path), (snap) => {
-    data[key] = snap.val();
+  backend.listen(path, (value) => {
+    data[key] = value;
     if (key === "choice") watchVotes();
     render(key);
   });
 }
 
 // 今の選択肢の投票だけを見る
-let votesRef = null;
+let stopVotes = null;
 let votesFor = null;
 function watchVotes() {
   const id = data.choice?.id ?? null;
   if (id === votesFor) return;
-  if (votesRef) off(votesRef);
+  if (stopVotes) stopVotes();
   votesFor = id;
   data.votes = {};
-  votesRef = id ? roomRef(`audience/votes/${id}`) : null;
-  if (votesRef) onValue(votesRef, (snap) => { data.votes = { [id]: snap.val() || {} }; render("votes"); });
+  stopVotes = id ? backend.listen(`audience/votes/${id}`, (v) => { data.votes = { [id]: v || {} }; render("votes"); }) : null;
 }
 
 function get(path) {
@@ -172,7 +164,7 @@ function remainingSeconds(choice) {
 function castVote(index) {
   const choice = data.choice;
   if (!choice || choice.status !== "open") return;
-  set(roomRef(`audience/votes/${choice.id}/${viewerId}`), index);
+  backend.set(`audience/votes/${choice.id}/${viewerId}`, index);
 }
 
 function renderChoice() {
@@ -264,16 +256,15 @@ $("comment-form").addEventListener("submit", (e) => {
   if (!text) return;
   const vote = voteFromText(text);
   const name = nameInput.value.trim() || "名無しの村人";
-  push(roomRef("audience/comments"), { name, text, vid: viewerId, t: serverTimestamp() });
+  backend.push("audience/comments", { name, text, vid: viewerId });
   if (vote >= 0) castVote(vote);
   input.value = "";
 });
 
 // 最新50件を表示し、ページを開いたあとに来たコメントは画面の上にも流す
 const openedAt = Date.now();
-onChildAdded(query(roomRef("audience/comments"), limitToLast(50)), (snap) => {
-  const c = snap.val();
-  addComment(c, typeof c?.t === "number" && c.t > openedAt - 2000);
+backend.onChildAdded("audience/comments", 50, (c) => {
+  addComment(c, typeof c?.t === "number" && c.t > serverNow() - (Date.now() - openedAt) - 2000);
 });
 
 function addComment(c, live) {
@@ -301,12 +292,16 @@ function flyOnScreen(text) {
 }
 
 // ── スマホで見る（QRコード） ─────────────────────
-$("share-button").addEventListener("click", () => {
+$("share-button").addEventListener("click", async () => {
   const panel = $("share");
   panel.hidden = !panel.hidden;
   if (panel.hidden || panel.dataset.ready) return;
   panel.dataset.ready = "1";
-  const url = location.href;
+  const url = await backend.shareUrl();
   $("share-url").textContent = url;
-  if (window.QRCode) new window.QRCode($("share-qr"), { text: url, width: 180, height: 180 });
+  // QRコードの部品は使うときだけ読み込む（インターネットにつながっていなければURLだけ表示）
+  const script = document.createElement("script");
+  script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+  script.onload = () => new window.QRCode($("share-qr"), { text: url, width: 180, height: 180 });
+  document.head.append(script);
 });
