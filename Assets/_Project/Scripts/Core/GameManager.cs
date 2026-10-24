@@ -239,8 +239,7 @@ namespace JPHACKS2026
             hud.SetActive(show);
             hudText.text = $"達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}";
             if (LiveStream.Instance != null && LiveStream.Instance.Config.ViewerUrl.Length > 0)
-                hudText.text = $"スマホで見る：{LiveStream.Instance.Config.ViewerUrl}
-" + hudText.text;
+                hudText.text = $"スマホで見る：{LiveStream.Instance.Config.ViewerUrl}\n" + hudText.text;
         }
 
         // ── エンディング後 ───────────────────────────
