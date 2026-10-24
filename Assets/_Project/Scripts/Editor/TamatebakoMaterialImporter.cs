@@ -12,12 +12,12 @@ namespace JPHACKS2026.Editor
     /// </summary>
     public sealed class TamatebakoMaterialImporter : AssetPostprocessor
     {
-        const string ModelPath = "Assets/_Project/Art/Models/Props/Tamatebako.fbx";
-        const string TexturePath = "Assets/_Project/Art/Models/Props/玉手箱.fbm/base_color.png";
+        public const string ModelPath = "Assets/_Project/Art/Models/Props/tamatebako.fbx";
+        const string TexturePath = "Assets/_Project/Art/Models/tamatebako.fbm/フタ_ベースカラー.png";
         const string MaterialDir = "Assets/_Project/Art/Materials/Tamatebako";
         public const string PatternMaterialPath = MaterialDir + "/Tamatebako_Pattern.mat";
         public const string LacquerMaterialPath = MaterialDir + "/Tamatebako_Lacquer.mat";
-        const string ImportVersion = "TamatebakoMaterialAssets-v3";
+        const string ImportVersion = "TamatebakoMaterialAssets-v4";
 
         // FBX内のマテリアル名。模様の画像がつながっているのはBlenderの「Material」（Unityでは「Material.001」になることがある）
         static readonly string[] PatternSourceNames = { "Material", "Material.001" };

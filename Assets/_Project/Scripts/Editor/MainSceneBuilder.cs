@@ -371,11 +371,11 @@ namespace JPHACKS2026.Editor
             return root;
         }
 
-        const string TamatebakoModelPath = "Assets/_Project/Art/Models/Props/Tamatebako.fbx";
+        const string TamatebakoModelPath = TamatebakoMaterialImporter.ModelPath;
 
         /// <summary>
         /// 玉手箱。原点＝底面の中心、幅 0.32×scale。子の "Lid"（ふた）は単体でつかめるよう当たり判定を持つ。
-        /// モデル（Tamatebako.fbx：本体「玉手箱_はこ」＋ふた「玉手箱_フタ」）があれば使い、なければ仮モデルで組む。
+        /// モデル（tamatebako.fbx：本体「tamatebako_hako」＋ふた「tamatebako_huta」）があれば使い、なければ仮モデルで組む。
         /// </summary>
         static GameObject BuildTamatebako(string name, Transform parent, Vector3 pos, float scale)
         {
@@ -407,12 +407,12 @@ namespace JPHACKS2026.Editor
             Transform baseMesh = null, lidMesh = null;
             foreach (var r in inst.GetComponentsInChildren<Renderer>())
             {
-                if (r.name.Contains("フタ")) lidMesh = r.transform;
-                else if (r.name.Contains("はこ")) baseMesh = r.transform;
+                if (r.name.Contains("huta") || r.name.Contains("フタ")) lidMesh = r.transform;
+                else if (r.name.Contains("hako") || r.name.Contains("はこ")) baseMesh = r.transform;
             }
             if (baseMesh == null || lidMesh == null)
             {
-                Debug.LogWarning($"[JPHACKS2026] 玉手箱モデルに「はこ」「フタ」のメッシュが見つからないため仮モデルを使います: {TamatebakoModelPath}");
+                Debug.LogWarning($"[JPHACKS2026] 玉手箱モデルに本体（hako）・ふた（huta）のメッシュが見つからないため仮モデルを使います: {TamatebakoModelPath}");
                 Object.DestroyImmediate(inst);
                 Object.DestroyImmediate(root);
                 return null;
