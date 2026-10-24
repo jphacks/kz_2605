@@ -48,13 +48,16 @@ Quest（Unity）──REST──▶ Firebase Realtime Database ◀──JS SDK�
 
 | パス | 書く人 | 中身 |
 |---|---|---|
-| `state` | Unity | `phase`（title/story/ending）、`area` / `areaName`、`subtitle`（speaker, text） |
+| `state` | Unity | `phase`（title/story/ending/ended。ended で「ご視聴ありがとうございました。」）、`area` / `areaName`、`subtitle`（speaker, text） |
 | `frame` | Unity | VR視点の画像（JPEG の base64）。既定は1秒ごと・480×270 |
 | `choice` | Unity | `id`, `question`, `options`[label, hint], `timeLimit`, `remaining`, `status`（open/closed）, `result`, `decidedBy`（player/viewers/timeout） |
-| `votes/{choiceId}/{viewerId}` | 視聴ページ | 選んだ選択肢の番号 |
-| `comments/{pushId}` | 視聴ページ | `name`, `text`（60文字まで）, `t` |
-| `viewers/{viewerId}` | 視聴ページ | 接続中だけ存在（切断で自動削除）。この数が視聴者数 |
+| `audience/votes/{choiceId}/{viewerId}` | 視聴ページ | 選んだ選択肢の番号 |
+| `audience/comments/{pushId}` | 視聴ページ | `name`, `text`（60文字まで）, `t` |
+| `audience/viewers/{viewerId}` | 視聴ページ | 接続中だけ存在（切断で自動削除）。この数が視聴者数 |
 | `ending` | Unity | 到達したエンディング |
+
+Unity は、送る変更をためて1本の PATCH（複数パス同時更新）にまとめて送り、`audience` だけをストリーミング（Server-Sent Events）で受け取ります。
+回線が遅くても遅れが溜まりません。
 
 ## 注意
 

@@ -27,21 +27,26 @@ const viewerId = load("otogi.viewerId", null) || (() => {
 })();
 
 // ── Firebase の内容を手元の data に写して描画する ─────────
+// 視聴者が書く場所（投票・コメント・視聴者数）は audience/ の下にまとめる（Unity はここだけをストリーミングで受け取る）
 const data = {};
 let connected = false;
-let lastFrameAt = 0;
+let serverOffset = 0;   // 端末の時計とサーバーの時計の差
+const serverNow = () => Date.now() + serverOffset;
+onValue(ref(db, ".info/serverTimeOffset"), (snap) => { serverOffset = snap.val() || 0; });
 
-// 視聴者数：つながっている間だけ viewers に自分を書き、切断で自動的に消える
+// 視聴者数：つながっている間だけ audience/viewers に自分を書き、切断で自動的に消える
+let disconnectedSince = Date.now();
 onValue(ref(db, ".info/connected"), (snap) => {
   connected = !!snap.val();
+  if (!connected) disconnectedSince = Date.now();
   updateLive();
   if (!connected) return;
-  const me = roomRef(`viewers/${viewerId}`);
+  const me = roomRef(`audience/viewers/${viewerId}`);
   onDisconnect(me).remove().then(() => set(me, serverTimestamp()));
 });
 
-for (const key of ["viewers", "frame", "state", "ending", "choice"]) {
-  onValue(roomRef(key), (snap) => {
+for (const [key, path] of [["viewers", "audience/viewers"], ["frame", "frame"], ["state", "state"], ["ending", "ending"], ["choice", "choice"]]) {
+  onValue(roomRef(path), (snap) => {
     data[key] = snap.val();
     if (key === "choice") watchVotes();
     render(key);
@@ -57,7 +62,7 @@ function watchVotes() {
   if (votesRef) off(votesRef);
   votesFor = id;
   data.votes = {};
-  votesRef = id ? roomRef(`votes/${id}`) : null;
+  votesRef = id ? roomRef(`audience/votes/${id}`) : null;
   if (votesRef) onValue(votesRef, (snap) => { data.votes = { [id]: snap.val() || {} }; render("votes"); });
 }
 
@@ -69,7 +74,7 @@ function render(top) {
   switch (top) {
     case "viewers": $("viewer-count").textContent = Object.keys(data.viewers || {}).length; break;
     case "frame": renderFrame(); break;
-    case "state": renderState(); break;
+    case "state": renderState(); updateLive(); break;
     case "ending": renderEnding(); break;
     case "choice":
     case "votes": renderChoice(); break;
@@ -77,21 +82,50 @@ function render(top) {
 }
 
 // ── VR視点の画像 ─────────────────────────────
+let firstFrameT = undefined;   // ページを開いたときに残っていた画像の時刻（古いかもしれない）
+let lastArrival = 0;           // ページを開いてから新しい画像が届いた時刻
 function renderFrame() {
   const f = data.frame;
   if (!f || !f.jpg) return;
   $("frame").src = "data:image/jpeg;base64," + f.jpg;
-  lastFrameAt = Date.now();
+  if (firstFrameT === undefined) firstFrameT = f.t;
+  else if (f.t !== firstFrameT) lastArrival = Date.now();
   updateLive();
 }
+
+const STALL_MS = 15000;          // 配信側の画像がこれだけ届かなければ、通信が途絶えたとみなす
+const OFFLINE_MS = 8000;         // 見ている側がこれだけ切れていれば、通信が途絶えたとみなす
+let everConnected = false;
+// 新しい画像が届いていればその到着からの時間、まだなら残っていた画像の時刻からの時間（配信側の時計のずれに強くする）
+const frameAge = () => (lastArrival ? Date.now() - lastArrival : data.frame?.t ? serverNow() - data.frame.t : Infinity);
+
+/**
+ * LIVE表示と「ご視聴ありがとうございました。」。次のどれかで表示する。
+ *  ・配信が閉じた（Unity から終了の合図 state.phase = "ended"）
+ *  ・配信側の通信が途絶えた（画像が STALL_MS 届かない。配信が一度も始まっていなければ「準備中」のまま）
+ *  ・見ている側の通信が途絶えた（Firebase から OFFLINE_MS 以上切れている）
+ */
 function updateLive() {
-  const live = connected && Date.now() - lastFrameAt < 8000;
+  if (connected) everConnected = true;
+  const closed = data.state?.phase === "ended";
+  const hostLost = !closed && data.frame?.t != null && frameAge() > STALL_MS;
+  const selfLost = !connected && everConnected && Date.now() - disconnectedSince > OFFLINE_MS;
+  const ended = closed || hostLost || selfLost;
+  const fresh = connected && !ended && frameAge() < STALL_MS;
+
   const badge = $("live-badge");
-  badge.textContent = live ? "LIVE" : connected ? "準備中" : "接続中…";
-  badge.classList.toggle("offline", !live);
-  $("screen-empty").hidden = live;
+  badge.textContent = selfLost ? "通信が途絶えました" : ended ? "配信終了" : fresh ? "LIVE" : connected ? "準備中" : "接続中…";
+  badge.classList.toggle("offline", !fresh);
+  $("screen-empty").hidden = fresh || ended;
+  $("thanks").hidden = !ended;
+  $("thanks-sub").textContent =
+    selfLost ? "通信が途絶えました。電波の良い場所で、ページを再読み込みしてください。" :
+    closed ? "配信は終了しました。また絵本の世界でお会いしましょう。" :
+    "配信が終了したか、通信が途絶えました。また絵本の世界でお会いしましょう。";
+  if (ended) $("ending").hidden = true;
+  else renderEnding();
 }
-setInterval(updateLive, 2000);
+setInterval(updateLive, 1000);
 
 // ── 場面と字幕 ───────────────────────────────
 function renderState() {
@@ -119,7 +153,7 @@ function renderState() {
 // ── エンディング ─────────────────────────────
 function renderEnding() {
   const e = data.ending;
-  $("ending").hidden = !e;
+  $("ending").hidden = !e || !$("thanks").hidden;
   if (!e) return;
   $("ending-title").textContent = `『${e.title}』`;
   $("ending-genre").textContent = `${e.id}　${e.genre}`;
@@ -138,7 +172,7 @@ function remainingSeconds(choice) {
 function castVote(index) {
   const choice = data.choice;
   if (!choice || choice.status !== "open") return;
-  set(roomRef(`votes/${choice.id}/${viewerId}`), index);
+  set(roomRef(`audience/votes/${choice.id}/${viewerId}`), index);
 }
 
 function renderChoice() {
@@ -230,14 +264,14 @@ $("comment-form").addEventListener("submit", (e) => {
   if (!text) return;
   const vote = voteFromText(text);
   const name = nameInput.value.trim() || "名無しの村人";
-  push(roomRef("comments"), { name, text, vid: viewerId, t: serverTimestamp() });
+  push(roomRef("audience/comments"), { name, text, vid: viewerId, t: serverTimestamp() });
   if (vote >= 0) castVote(vote);
   input.value = "";
 });
 
 // 最新50件を表示し、ページを開いたあとに来たコメントは画面の上にも流す
 const openedAt = Date.now();
-onChildAdded(query(roomRef("comments"), limitToLast(50)), (snap) => {
+onChildAdded(query(roomRef("audience/comments"), limitToLast(50)), (snap) => {
   const c = snap.val();
   addComment(c, typeof c?.t === "number" && c.t > openedAt - 2000);
 });

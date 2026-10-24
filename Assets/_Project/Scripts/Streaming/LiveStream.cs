@@ -7,8 +7,12 @@ namespace JPHACKS2026
 {
     /// <summary>
     /// 「おとぎ配信」の配信機能。Firebase Realtime Database を介して、スマホ等の視聴ページとつなぐ。
-    /// 送る：場面・字幕・選択肢・エンディング・VR視点の画像（rooms/{room}/state, choice, frame）
-    /// 受け取る：投票（votes/{choiceId}）・コメント（comments）・視聴者数（viewers）
+    /// 送る：場面・字幕・選択肢・エンディング・VR視点の画像（rooms/{room}/state, choice, ending, frame）
+    /// 受け取る：視聴者が書く投票・コメント・視聴者数（rooms/{room}/audience/votes, comments, viewers）
+    ///
+    /// 回線が遅くても遅れが溜まらないよう、
+    /// ・送る変更はためておき、1本のリクエスト（複数パス同時更新）にまとめて送る。前の送信が終わるまで次は送らない
+    /// ・受け取りは問い合わせを繰り返さず、ストリーミング（つないだままの1本）で受ける
     /// 設定（LiveStreamConfig）が無い・無効のときは Instance が null のままで、ゲームは今まで通り動く。
     /// </summary>
     public class LiveStream : MonoBehaviour
@@ -26,9 +30,16 @@ namespace JPHACKS2026
         FirebaseRest rest;
         SpectatorCamera spectator;
         string choiceId;
-        string lastCommentKey;
-        bool commentsReady;
         float lastRemainingSent = -1f;
+
+        // 送る前にためておく変更（キーはルームからのパス。値 null は削除）
+        readonly Dictionary<string, object> pending = new();
+        string pendingFrame;
+        bool sending;
+
+        // 視聴者側のデータ（audience）の手元の写し
+        readonly Dictionary<string, object> audience = new();
+        readonly HashSet<string> seenComments = new();
 
         static readonly Dictionary<string, string> AreaNames = new()
         {
@@ -54,10 +65,12 @@ namespace JPHACKS2026
 
         void Start()
         {
-            // 前回の配信の選択肢・エンディングが残っていたら消す（コメントは残す）
-            Send("PATCH", "", new Dictionary<string, object> { { "choice", null }, { "ending", null } });
-            StartCoroutine(PollLoop());
+            // 前回の配信の選択肢・エンディングが残っていたら消す（投票は選択肢ごとのIDで分かれるので残してよい）
+            Queue("choice", null);
+            Queue("ending", null);
+            StartCoroutine(SendLoop());
             StartCoroutine(FrameLoop());
+            StartCoroutine(rest.Listen("audience", OnAudienceEvent));
         }
 
         void OnDestroy()
@@ -65,31 +78,104 @@ namespace JPHACKS2026
             if (Instance == this) Instance = null;
         }
 
-        void Send(string method, string path, object value)
+        /// <summary>アプリを終えるとき：視聴ページに「配信終了」を伝える（ご視聴ありがとうございました）。</summary>
+        void OnApplicationQuit()
         {
-            StartCoroutine(rest.Send(method, path, Json.Serialize(value)));
+            rest.SendBlocking("PATCH", "", Json.Serialize(new Dictionary<string, object>
+            {
+                { "state/phase", "ended" }, { "state/subtitle", null }, { "state/t", Now }, { "choice", null },
+            }));
         }
 
         static long Now => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // ── 送る ─────────────────────────────────
+        // ── 送る（ためて、まとめて送る） ─────────────────────
+
+        /// <summary>
+        /// 変更をためる。同じ場所への変更は新しいほうで上書きする。
+        /// 親（例 "choice"）と子（例 "choice/remaining"）が同時に入らないよう整理する（Firebase の制約）。
+        /// </summary>
+        void Queue(string path, object value)
+        {
+            // 親がすでにためてあれば、その中身を書き換える
+            foreach (var key in pending.Keys)
+            {
+                if (!path.StartsWith(key + "/")) continue;
+                if (pending[key] is Dictionary<string, object> parent)
+                {
+                    SetNested(parent, path.Substring(key.Length + 1), value);
+                    return;
+                }
+                pending.Remove(key);   // 親が削除（null）なら、子の変更を優先する
+                break;
+            }
+            // 子がためてあれば、親で丸ごと置き換えるので消す
+            var children = new List<string>();
+            foreach (var key in pending.Keys) if (key.StartsWith(path + "/")) children.Add(key);
+            foreach (var key in children) pending.Remove(key);
+            pending[path] = value;
+        }
+
+        static void SetNested(Dictionary<string, object> node, string path, object value)
+        {
+            var segs = path.Split('/');
+            for (int i = 0; i < segs.Length - 1; i++)
+            {
+                if (node.TryGetValue(segs[i], out var child) && child is Dictionary<string, object> d) node = d;
+                else { var n = new Dictionary<string, object>(); node[segs[i]] = n; node = n; }
+            }
+            if (value == null) node.Remove(segs[^1]);
+            else node[segs[^1]] = value;
+        }
+
+        IEnumerator SendLoop()
+        {
+            while (true)
+            {
+                yield return null;
+                if (sending || (pending.Count == 0 && pendingFrame == null)) continue;
+
+                var batch = new Dictionary<string, object>(pending);
+                pending.Clear();
+                if (pendingFrame != null)
+                {
+                    batch["frame"] = new Dictionary<string, object>
+                    {
+                        { "jpg", pendingFrame }, { "w", Config.frameWidth }, { "h", Config.frameHeight }, { "t", Now },
+                    };
+                    pendingFrame = null;
+                }
+                sending = true;
+                yield return rest.Send("PATCH", "", Json.Serialize(batch), code =>
+                {
+                    sending = false;
+                    // 通信できなかったときだけ（画像以外を）もう一度送る。サーバーに断られた（4xx）変更は捨てる
+                    if (code != 0) return;
+                    foreach (var kv in batch)
+                        if (kv.Key != "frame" && !pending.ContainsKey(kv.Key)) Queue(kv.Key, kv.Value);
+                });
+            }
+        }
 
         public void PublishPhase(string phase)
         {
-            Send("PATCH", "state", new Dictionary<string, object> { { "phase", phase }, { "t", Now } });
+            Queue("state/phase", phase);
+            Queue("state/t", Now);
         }
 
         public void PublishScene(string areaId)
         {
             AreaNames.TryGetValue(areaId, out var name);
-            Send("PATCH", "state", new Dictionary<string, object> { { "area", areaId }, { "areaName", name ?? areaId }, { "t", Now } });
+            Queue("state/area", areaId);
+            Queue("state/areaName", name ?? areaId);
+            Queue("state/t", Now);
         }
 
         /// <summary>字幕。text が null なら字幕を消す。</summary>
         public void PublishSubtitle(string speaker, string text)
         {
-            object subtitle = text == null ? null : new Dictionary<string, object> { { "speaker", speaker ?? "" }, { "text", text } };
-            Send("PATCH", "state", new Dictionary<string, object> { { "subtitle", subtitle }, { "t", Now } });
+            Queue("state/subtitle", text == null ? null : new Dictionary<string, object> { { "speaker", speaker ?? "" }, { "text", text } });
+            Queue("state/t", Now);
         }
 
         public void OpenChoice(ChoiceDef def)
@@ -101,11 +187,12 @@ namespace JPHACKS2026
             var options = new List<object>();
             foreach (var o in def.options)
                 options.Add(new Dictionary<string, object> { { "label", o.label }, { "hint", o.hint.Replace("\n", "") } });
-            Send("PUT", "choice", new Dictionary<string, object>
+            Queue("choice", new Dictionary<string, object>
             {
                 { "id", choiceId }, { "question", def.question }, { "options", options },
                 { "timeLimit", def.timeLimit }, { "remaining", def.timeLimit }, { "status", "open" }, { "t", Now },
             });
+            CountVotes();
         }
 
         /// <summary>残り時間をWebに伝える（1秒ごとに間引く）。</summary>
@@ -113,17 +200,17 @@ namespace JPHACKS2026
         {
             if (choiceId == null || lastRemainingSent - remaining < 1f) return;
             lastRemainingSent = remaining;
-            Send("PATCH", "choice", new Dictionary<string, object> { { "remaining", Mathf.Max(0, remaining) } });
+            Queue("choice/remaining", Mathf.Max(0, remaining));
         }
 
         /// <summary>選択肢を締め切る。result が -1 なら時間切れ。decidedBy は "player" / "viewers" / "timeout"。</summary>
         public void CloseChoice(int result, string decidedBy)
         {
             if (choiceId == null) return;
-            Send("PATCH", "choice", new Dictionary<string, object>
-            {
-                { "status", "closed" }, { "result", result }, { "decidedBy", decidedBy }, { "remaining", 0 },
-            });
+            Queue("choice/status", "closed");
+            Queue("choice/result", result);
+            Queue("choice/decidedBy", decidedBy);
+            Queue("choice/remaining", 0);
             choiceId = null;
         }
 
@@ -138,72 +225,63 @@ namespace JPHACKS2026
 
         public void PublishEnding(EndingId id)
         {
-            Send("PUT", "ending", new Dictionary<string, object>
+            Queue("ending", new Dictionary<string, object>
             {
                 { "id", id.ToString() }, { "title", EndingCatalog.Title(id) }, { "genre", EndingCatalog.Genre(id) }, { "t", Now },
             });
         }
 
-        public void ClearEnding() => Send("PUT", "ending", null);
+        public void ClearEnding() => Queue("ending", null);
 
         // ── VR視点の画像 ─────────────────────────────
 
         IEnumerator FrameLoop()
         {
-            bool sending = false;
             while (true)
             {
                 yield return new WaitForSecondsRealtime(Mathf.Max(0.2f, Config.frameInterval));
-                if (sending) continue;   // 回線が遅いときは前の送信が終わるまで撮らない
-                spectator.Capture(jpg =>
-                {
-                    sending = true;
-                    StartCoroutine(rest.Send("PUT", "frame", Json.Serialize(new Dictionary<string, object>
-                    {
-                        { "jpg", jpg }, { "w", Config.frameWidth }, { "h", Config.frameHeight }, { "t", Now },
-                    }), _ => sending = false));
-                });
+                // 送信待ちの画像があれば撮らない（古い画像を溜めない）
+                if (pendingFrame == null) spectator.Capture(jpg => pendingFrame = jpg);
             }
         }
 
-        // ── 受け取る ─────────────────────────────────
+        // ── 受け取る（audience のストリーミング） ───────────────
 
-        IEnumerator PollLoop()
+        void OnAudienceEvent(string evt, string payload)
         {
-            // 起動前のコメントは流さない：最新のキーだけ覚えておく
-            yield return rest.Get("comments", "orderBy=%22%24key%22&limitToLast=1", v =>
-            {
-                if (v is Dictionary<string, object> d) foreach (var k in d.Keys) lastCommentKey = k;
-                commentsReady = true;
-            });
+            if (evt != "put" && evt != "patch") return;   // keep-alive など
+            if (Json.Parse(payload) is not Dictionary<string, object> msg) return;
+            string path = msg.TryGetValue("path", out var p) ? (p as string ?? "/") : "/";
+            msg.TryGetValue("data", out var data);
+            bool initial = path == "/" && evt == "put";
 
-            while (true)
-            {
-                yield return rest.Get("viewers", "shallow=true", v => ViewerCount = v is Dictionary<string, object> d ? d.Count : 0);
+            if (evt == "put") Apply(path, data);
+            else if (data is Dictionary<string, object> d)
+                foreach (var kv in d) Apply(path.TrimEnd('/') + "/" + kv.Key, kv.Value);
 
-                if (choiceId != null)
-                {
-                    string id = choiceId;
-                    yield return rest.Get("votes/" + id, null, v => { if (id == choiceId) CountVotes(v); });
-                }
-
-                if (commentsReady)
-                {
-                    string query = lastCommentKey == null
-                        ? "orderBy=%22%24key%22&limitToLast=20"
-                        : "orderBy=%22%24key%22&startAt=%22" + Uri.EscapeDataString(lastCommentKey) + "%22&limitToFirst=30";
-                    yield return rest.Get("comments", query, ReceiveComments);
-                }
-
-                yield return new WaitForSecondsRealtime(Mathf.Max(0.3f, Config.pollInterval));
-            }
+            ViewerCount = audience.TryGetValue("viewers", out var v) && v is Dictionary<string, object> vs ? vs.Count : 0;
+            CountVotes();
+            ReceiveComments(initial);
         }
 
-        void CountVotes(object v)
+        void Apply(string path, object value)
+        {
+            var segs = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segs.Length == 0)
+            {
+                audience.Clear();
+                if (value is Dictionary<string, object> all) foreach (var kv in all) audience[kv.Key] = kv.Value;
+                return;
+            }
+            SetNested(audience, string.Join("/", segs), value);
+        }
+
+        void CountVotes()
         {
             var counts = new int[Votes.Length];
             int total = 0;
-            if (v is Dictionary<string, object> d)
+            if (choiceId != null && audience.TryGetValue("votes", out var all) && all is Dictionary<string, object> byChoice
+                && byChoice.TryGetValue(choiceId, out var v) && v is Dictionary<string, object> d)
             {
                 foreach (var vote in d.Values)
                 {
@@ -218,15 +296,15 @@ namespace JPHACKS2026
             TotalVotes = total;
         }
 
-        void ReceiveComments(object v)
+        /// <summary>まだ流していないコメントを流す。つないだ直後に届く過去のコメントは流さない。</summary>
+        void ReceiveComments(bool initial)
         {
-            if (v is not Dictionary<string, object> d) return;
+            if (!audience.TryGetValue("comments", out var all) || all is not Dictionary<string, object> d) return;
             var keys = new List<string>(d.Keys);
             keys.Sort(string.CompareOrdinal);   // FirebaseのpushキーはASCII順＝投稿順
             foreach (var key in keys)
             {
-                if (key == lastCommentKey) continue;
-                lastCommentKey = key;
+                if (!seenComments.Add(key) || initial) continue;
                 if (d[key] is not Dictionary<string, object> c) continue;
                 string text = c.TryGetValue("text", out var t) ? t as string : null;
                 if (string.IsNullOrWhiteSpace(text)) continue;
