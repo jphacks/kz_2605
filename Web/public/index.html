@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2a2140">
+  <title>おとぎ配信</title>
+  <meta name="description" content="VRで絵本の世界に入った体験者を、リアルタイムで見守り、物語の選択肢に投票できる配信ページ">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=Klee+One:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-title">おとぎ配信</span>
+      <span class="brand-sub">え！本当に… 絵本の世界へ</span>
+    </div>
+    <div class="status">
+      <span id="live-badge" class="live-badge offline">準備中</span>
+      <span class="viewers">視聴者 <b id="viewer-count">0</b>人</span>
+      <button id="share-button" class="share-button" type="button">スマホで見る</button>
+    </div>
+  </header>
+
+  <div id="share" class="share" hidden>
+    <div id="share-qr" class="share-qr"></div>
+    <div>
+      <p class="share-text">スマホでQRコードを読み取るか、このアドレスを開いてください。</p>
+      <p id="share-url" class="share-url"></p>
+    </div>
+  </div>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="book">
+        <div class="book-page">
+          <div class="screen">
+            <img id="frame" alt="体験者が見ている絵本の世界">
+            <div id="screen-empty" class="screen-empty">絵本がひらくのを待っています…</div>
+            <div id="screen-danmaku" class="screen-danmaku" aria-hidden="true"></div>
+            <div id="area-name" class="area-name"></div>
+          </div>
+          <p id="subtitle" class="subtitle"><span class="subtitle-idle">― 物語はまだ始まっていません ―</span></p>
+        </div>
+      </div>
+
+      <div id="ending" class="ending" hidden>
+        <div class="ending-label">おしまい</div>
+        <div id="ending-title" class="ending-title"></div>
+        <div id="ending-genre" class="ending-genre"></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section id="choice" class="card choice" hidden>
+        <div class="choice-head">
+          <span class="choice-label">みんなで決めよう</span>
+          <span id="choice-timer" class="choice-timer"></span>
+        </div>
+        <h2 id="choice-question" class="choice-question"></h2>
+        <div id="choice-timebar" class="timebar"><div></div></div>
+        <div id="choice-options" class="options"></div>
+        <p id="choice-note" class="choice-note">体験者が行動しないまま時間切れになると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。</p>
+      </section>
+
+      <section class="card comments">
+        <h2 class="card-title">コメント</h2>
+        <ul id="comment-list" class="comment-list"></ul>
+        <form id="comment-form" class="comment-form" autocomplete="off">
+          <input id="comment-name" class="name-input" maxlength="20" placeholder="なまえ">
+          <input id="comment-text" class="text-input" maxlength="60" placeholder="コメントする（選択肢の名前で1票）" required>
+          <button type="submit">送る</button>
+        </form>
+      </section>
+    </aside>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

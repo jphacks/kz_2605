@@ -30,6 +30,7 @@ namespace JPHACKS2026
         {
             IsSpeaking = true;
             subtitle.Show(line.speaker, line.text);
+            if (LiveStream.Instance != null) LiveStream.Instance.PublishSubtitle(line.speaker, line.text);
 
             var clip = string.IsNullOrEmpty(line.id) ? null : Resources.Load<AudioClip>("Narration/" + line.id);
             float duration;
@@ -53,6 +54,7 @@ namespace JPHACKS2026
             }
             voiceSource.Stop();
             subtitle.Hide();
+            if (LiveStream.Instance != null) LiveStream.Instance.PublishSubtitle(null, null);
             IsSpeaking = false;
             yield return Tween.Wait(gapBetweenLines);
         }

@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": true,
+        "state": { ".write": true },
+        "frame": { ".write": true },
+        "choice": { ".write": true },
+        "ending": { ".write": true },
+        "votes": {
+          "$choice": {
+            "$viewer": {
+              ".write": true,
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 6"
+            }
+          }
+        },
+        "comments": {
+          "$comment": {
+            ".write": "!data.exists()",
+            ".validate": "newData.hasChildren(['text', 't']) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 60 && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 20))"
+          }
+        },
+        "viewers": {
+          "$viewer": { ".write": true }
+        }
+      }
+    }
+  }
+}
