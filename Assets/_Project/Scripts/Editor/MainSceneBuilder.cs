@@ -370,11 +370,11 @@ namespace JPHACKS2026.Editor
             return root;
         }
 
-        const string TamatebakoModelPath = "Assets/_Project/Art/Models/Props/玉手箱.fbx";
+        const string TamatebakoModelPath = "Assets/_Project/Art/Models/Props/Tamatebako.fbx";
 
         /// <summary>
         /// 玉手箱。原点＝底面の中心、幅 0.32×scale。子の "Lid"（ふた）は単体でつかめるよう当たり判定を持つ。
-        /// モデル（玉手箱.fbx：本体「玉手箱_はこ」＋ふた「玉手箱_フタ」）があれば使い、なければ仮モデルで組む。
+        /// モデル（Tamatebako.fbx：本体「玉手箱_はこ」＋ふた「玉手箱_フタ」）があれば使い、なければ仮モデルで組む。
         /// </summary>
         static GameObject BuildTamatebako(string name, Transform parent, Vector3 pos, float scale)
         {
