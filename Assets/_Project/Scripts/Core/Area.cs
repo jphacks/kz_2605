@@ -31,7 +31,9 @@ namespace JPHACKS2026
         public void Init()
         {
             if (initialized) return;
+            if (areaId == "title") TitleRoomDetails.Build(this);
             SceneryDetails.Build(this);
+            OceanAmbience.Build(this);
             initialized = true;
             foreach (var r in GetComponentsInChildren<Resettable>(true)) r.Capture();
             // ホラー演出でエリア全体の色を変えるので、全Rendererのマテリアルを覚えておく
@@ -63,6 +65,9 @@ namespace JPHACKS2026
                 gm.sun.color = sunColor;
                 gm.sun.intensity = sunIntensity;
                 gm.sun.transform.rotation = Quaternion.Euler(sunEuler);
+                gm.sun.shadows = areaId == "title" ? LightShadows.Hard : LightShadows.None;
+                gm.sun.shadowBias = .015f;
+                gm.sun.shadowNormalBias = .12f;
             }
             if (gm != null && gm.Rig != null && gm.Rig.Head != null)
             {

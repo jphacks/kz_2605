@@ -46,7 +46,7 @@ namespace JPHACKS2026
             {
                 case "village": Village(area.transform, t); break;
                 case "beach": Beach(area.transform, t); break;
-                case "sea": Seabed(t); break;
+                case "sea": Seabed(area.transform, t); break;
                 case "ryugu": Banquet(area.transform, t); break;
             }
             CombineScenery(t);
@@ -57,7 +57,7 @@ namespace JPHACKS2026
             var batches = new Dictionary<Material, List<CombineInstance>>();
             foreach (var filter in root.GetComponentsInChildren<MeshFilter>())
             {
-                if (filter.GetComponentInParent<SceneryMotion>() != null || filter.GetComponentInParent<Swimmer>() != null) continue;
+                if (filter.GetComponentInParent<SceneryMotion>() != null || filter.GetComponentInParent<Swimmer>() != null || filter.GetComponentInParent<ShorelineWaves>() != null || filter.GetComponentInParent<SceneryModelVisual>() != null) continue;
                 var renderer = filter.GetComponent<MeshRenderer>();
                 if (renderer == null || !renderer.enabled || filter.sharedMesh == null) continue;
                 var mat = renderer.sharedMaterial;
@@ -133,11 +133,19 @@ namespace JPHACKS2026
         static void Beach(Transform area,Transform t)
         {
             var shore=area.Find("Shore"); if(shore!=null) shore.gameObject.SetActive(false);
-            for(int row=0;row<3;row++) for(int i=0;i<30;i++)
+            var sea=area.Find("Sea"); if(sea!=null) sea.gameObject.SetActive(false);
+            Group(t,"Shoreline waves",Vector3.zero).gameObject.AddComponent<ShorelineWaves>();
+            foreach (Transform child in area)
             {
-                var p=new Vector3(-29+i*2,.045f,8.25f+row*1.4f+Mathf.Sin(i*.7f+row)*.3f);
-                var wave=Shape(t,"Breaking foam",p,new Vector3(2.3f,.035f,.22f+row*.06f),new Color(.85f,.95f,.93f),PrimitiveType.Sphere);
-                var motion=wave.gameObject.AddComponent<SceneryMotion>(); motion.wave=true; motion.phase=i*.25f+row; motion.amplitude=.16f;
+                if (child.name != "Driftwood" || child.GetComponent<Grabbable>() != null) continue;
+                var rb = child.gameObject.AddComponent<Rigidbody>();
+                rb.mass = .65f; rb.isKinematic = true;
+                var grab = child.gameObject.AddComponent<Grabbable>();
+                grab.kinematicUntilGrabbed = true;
+                var collider = child.GetComponent<Collider>();
+                if (collider != null && collider is MeshCollider meshCollider) meshCollider.convex = true;
+                if (collider == null) child.gameObject.AddComponent<CapsuleCollider>();
+                child.gameObject.AddComponent<Resettable>();
             }
             for(int i=0;i<22;i++)
             {
@@ -155,6 +163,12 @@ namespace JPHACKS2026
             Shape(boat,"Interior",new Vector3(0,.23f,0),new Vector3(.88f,.12f,2.2f),new Color(.18f,.12f,.08f),PrimitiveType.Sphere);
             for(int i=-1;i<=1;i++) Shape(boat,"Bench",new Vector3(0,.3f,i*.6f),new Vector3(1,.08f,.18f),Straw);
             Beam(boat,"Oar",new Vector3(-.9f,.4f,-1),new Vector3(.7f,.5f,1.2f),.06f,Straw);
+            if (Resources.Load<GameObject>("Scenery/FishingBoat") != null)
+            {
+                foreach (Transform child in boat) child.gameObject.SetActive(false);
+                AddBlenderModel(boat, "FishingBoat", 3.5f);
+                boat.localPosition = new Vector3(-6.3f, .04f, -1);
+            }
             for(int i=0;i<7;i++)
             {
                 Beam(t,"Fishing net warp",new Vector3(-8+i*.22f,.08f,1.6f),new Vector3(-8+i*.22f,.08f,3.3f),.012f,Straw);
@@ -163,8 +177,17 @@ namespace JPHACKS2026
             for(int i=0;i<4;i++) Tree(t,new Vector3(-13+i*8,0,-8));
             for(int i=0;i<4;i++) Shape(t,"Distant island",new Vector3(-22+i*15,-.8f,39+i%2*7),new Vector3(12,3.6f,5),new Color(.34f,.52f,.52f),PrimitiveType.Sphere);
         }
-        static void Seabed(Transform t)
+        static void Seabed(Transform area, Transform t)
         {
+            int fishIndex = 0;
+            foreach (var sw in area.GetComponentsInChildren<Swimmer>(true))
+            {
+                if (sw.name != "Fish") continue;
+                var model = AddBlenderModel(sw.transform, ReefModel(fishIndex++), .42f + fishIndex % 3 * .06f);
+                if (model == null) continue;
+                sw.GetComponent<Renderer>().enabled = false;
+                sw.transform.localScale = Vector3.one;
+            }
             for(int i=0;i<24;i++)
             {
                 float side=i%2==0?-1:1;
@@ -186,14 +209,52 @@ namespace JPHACKS2026
                 if(i%3==0) for(int f=0;f<5;f++)
                 {
                     var fish=Group(t,"School fish",Vector3.zero);
-                    Shape(fish,"Silver body",Vector3.zero,new Vector3(.09f,.14f,.32f),new Color(.5f,.8f,.84f),PrimitiveType.Sphere);
-                    Shape(fish,"Tail",new Vector3(0,0,-.19f),new Vector3(.025f,.2f,.12f),new Color(.95f,.77f,.24f),rotation:new Vector3(45,0,0));
+                    if (AddBlenderModel(fish, ReefModel(f), .30f + f * .015f) == null)
+                        Shape(fish,"Silver body",Vector3.zero,new Vector3(.09f,.14f,.32f),new Color(.5f,.8f,.84f),PrimitiveType.Sphere);
                     var sw=fish.gameObject.AddComponent<Swimmer>(); sw.center=new Vector3(side*4,-.5f+f*.13f,i*2.2f+f*.3f); sw.radius=1.2f+f*.12f; sw.speed=.45f;
                 }
             }
         }
+        static string ReefModel(int index) => index % 3 == 0 ? "ReefButterfly" : index % 3 == 1 ? "ReefClownfish" : "ReefTang";
+
+        static GameObject AddBlenderModel(Transform parent, string name, float length)
+        {
+            var prefab = Resources.Load<GameObject>("Scenery/" + name);
+            if (prefab == null) return null;
+            var visual = Object.Instantiate(prefab);
+            visual.name = "Blender " + name;
+            var marker = visual.AddComponent<SceneryModelVisual>();
+            foreach (var tr in visual.GetComponentsInChildren<Transform>())
+            {
+                if (tr.name == "Nose")
+                {
+                    var d = tr.position - visual.transform.position; d.y = 0;
+                    if (d.sqrMagnitude > .000001f) visual.transform.rotation = Quaternion.FromToRotation(d, Vector3.forward) * visual.transform.rotation;
+                }
+                if (tr.name == "Tail") marker.tail = tr;
+            }
+            var renderers = visual.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) { Object.Destroy(visual); return null; }
+            var bounds = renderers[0].bounds;
+            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+            visual.transform.localScale *= length / Mathf.Max(.001f, bounds.size.z);
+            foreach (var r in renderers)
+            {
+                var materials = r.sharedMaterials;
+                for (int j = 0; j < materials.Length; j++)
+                {
+                    var source = materials[j];
+                    if (source == null) continue;
+                    materials[j] = Paint(source.HasProperty("_BaseColor") ? source.GetColor("_BaseColor") : source.color);
+                }
+                r.sharedMaterials = materials;
+            }
+            visual.transform.SetParent(parent, false);
+            return visual;
+        }
         static void Banquet(Transform area,Transform t)
         {
+            SecretRoom(t);
             int n=0;
             foreach(var swimmer in area.GetComponentsInChildren<Swimmer>(true))
             {
@@ -229,7 +290,8 @@ namespace JPHACKS2026
                 if(model==null) { Debug.LogWarning("Missing Blender food model Food"+i); continue; }
                 // Preserve the original root, rigidbody, collider and trigger references.
                 var visual=Object.Instantiate(model,food,false); visual.name="Blender cuisine";
-                visual.transform.localScale=new Vector3(1/food.localScale.x,1/food.localScale.y,1/food.localScale.z);
+                // Keep the FBX root scale (Blender exports x100 with cm-sized meshes) and cancel the placeholder scale.
+                visual.transform.localScale=Vector3.Scale(model.transform.localScale,new Vector3(1/food.localScale.x,1/food.localScale.y,1/food.localScale.z));
                 foreach(var r in visual.GetComponentsInChildren<Renderer>())
                 {
                     var materials=r.sharedMaterials;
@@ -243,8 +305,63 @@ namespace JPHACKS2026
                 food.GetComponent<Renderer>().enabled=false;
                 var plate=Shape(t,"Porcelain serving plate",new Vector3(food.localPosition.x,.408f,food.localPosition.z),new Vector3(.29f,.018f,.25f),new Color(.78f,.88f,.89f),PrimitiveType.Cylinder);
                 Shape(plate,"Gold plate rim",Vector3.zero,new Vector3(1.04f,.4f,1.04f),new Color(.74f,.57f,.25f),PrimitiveType.Cylinder);
+                // Rest the cuisine on top of the plate instead of sinking into it.
+                var renderers=visual.GetComponentsInChildren<Renderer>();
+                if(renderers.Length>0)
+                {
+                    var b=renderers[0].bounds; foreach(var r in renderers) b.Encapsulate(r.bounds);
+                    float top=plate.GetComponent<Renderer>().bounds.max.y;
+                    visual.transform.position+=Vector3.up*(top+.003f-b.min.y);
+                }
             }
         }
+        static void SecretRoom(Transform parent)
+        {
+            var room = Group(parent,"Forbidden archive",new Vector3(4,0,16));
+            var rotten = new Color(.16f,.12f,.105f);
+            var paper = new Color(.43f,.39f,.27f);
+            var ink = new Color(.09f,.075f,.075f);
+            for(int i=0;i<14;i++)
+                Shape(room,"Warped floor board",new Vector3(-1.85f+i*.285f,.012f,0),new Vector3(.27f,.022f,3.9f),i%3==0?Wood:rotten);
+            for(int s=-1;s<=1;s+=2)
+            {
+                for(int j=0;j<4;j++)
+                    Shape(room,"Cracked pillar",new Vector3(s*1.82f,1.45f,-1.65f+j*1.1f),new Vector3(.13f,2.9f,.13f),rotten,rotation:new Vector3(0,0,s*1.5f));
+                Shape(room,"Archive shelf",new Vector3(s*1.56f,1.0f,.1f),new Vector3(.42f,.07f,2.6f),rotten);
+                Shape(room,"Archive shelf",new Vector3(s*1.56f,1.85f,.1f),new Vector3(.42f,.07f,2.6f),rotten);
+                for(int j=0;j<8;j++)
+                    Shape(room,"Abandoned scroll",new Vector3(s*1.56f,1.11f,-.95f+j*.28f),new Vector3(.09f,.18f,.09f),paper,PrimitiveType.Cylinder,rotation:new Vector3(0,0,90));
+                for(int j=0;j<3;j++)
+                {
+                    Shape(room,"Empty portrait frame",new Vector3(s*1.90f,1.6f,-.9f+j*.85f),new Vector3(.04f,.55f,.38f),Wood);
+                    Shape(room,"Blackened portrait",new Vector3(s*1.87f,1.6f,-.9f+j*.85f),new Vector3(.015f,.45f,.28f),ink);
+                }
+                // Entrance leaves a clear center passage.
+                Shape(room,"Torn doorway panel",new Vector3(s*1.5f,1.5f,-1.96f),new Vector3(1,3,.08f),rotten);
+            }
+            for(int j=0;j<8;j++)
+            {
+                float x=-1.3f+j*.34f;
+                Shape(room,"Hanging paper talisman",new Vector3(x,2.22f,1.88f),new Vector3(.19f,.53f,.012f),paper,rotation:new Vector3(0,0,j%2==0?-7:5));
+                for(int k=0;k<4;k++) Shape(room,"Faded ink mark",new Vector3(x,2.38f-k*.1f,1.866f),new Vector3(.07f,.035f,.009f),ink);
+            }
+            for(int j=0;j<6;j++)
+                Beam(room,"Ceiling web",new Vector3(-1.85f,2.9f,1.85f),new Vector3(-1.82f+j*.23f,2.9f-j*.1f,.9f),.0035f,new Color(.37f,.39f,.37f));
+            for(int j=0;j<7;j++)
+                Shape(room,"Scattered old page",new Vector3(Mathf.Sin(j*3.1f)*1.1f,.035f,-.8f+j*.34f),new Vector3(.22f,.006f,.3f),paper,rotation:new Vector3(0,j*37,0));
+            for(int j=0;j<3;j++)
+            {
+                var lamp=Group(room,"Dying archive lamp",new Vector3(j==0?-1.3f:1.3f,1.35f,j==2?-1.5f:1.4f));
+                Shape(lamp,"Flame",Vector3.zero,new Vector3(.035f,.12f,.035f),new Color(.69f,.35f,.13f),PrimitiveType.Sphere);
+                var light=lamp.gameObject.AddComponent<Light>(); light.type=LightType.Point;
+                light.color=new Color(.55f,.72f,.62f); light.intensity=.65f; light.range=3.5f;
+                var flicker=lamp.gameObject.AddComponent<LightFlicker>(); flicker.baseIntensity=.65f; flicker.amount=.28f;
+            }
+            var chain=Group(room,"Chained chest",new Vector3(-1.25f,.26f,-1.25f));
+            Shape(chain,"Waterlogged chest",Vector3.zero,new Vector3(.6f,.46f,.4f),rotten);
+            for(int j=0;j<9;j++) Shape(chain,"Rusty chain link",new Vector3(-.3f+j*.075f,.24f,0),new Vector3(.055f,.03f,.10f),Stone,PrimitiveType.Sphere);
+        }
+
         static void Fish(Transform root,bool flat,int index)
         {
             Color c=flat?new Color(.57f,.44f,.27f):new Color(.96f,.30f,.34f);

@@ -7,7 +7,7 @@ namespace JPHACKS2026
     /// <summary>
     /// HMDなしでPlayモード確認するための簡易操作。XRデバイスが無効なときだけ有効になる。
     /// 右ドラッグ：見回す / WASD：移動 / マウス：右手を動かす / 左クリック：UI決定
-    /// G：右手グリップ / F：左手グリップ / H：右手を口元へ
+    /// 左クリック：右手で持つ・離して置く / G・F：従来のグリップ / H：右手を口元へ
     /// 1〜3：選択肢を直接選ぶ / Space：台詞送り / Esc・Tab：ポーズ
     /// </summary>
     [DefaultExecutionOrder(-90)]
@@ -94,6 +94,13 @@ namespace JPHACKS2026
             if (kb.dKey.isPressed) v.x += 1;
             if (kb.aKey.isPressed) v.x -= 1;
             return v;
+        }
+
+        public void LookAt(Vector3 worldPoint)
+        {
+            rig.head.rotation = Quaternion.LookRotation(worldPoint - rig.head.position);
+            yaw = rig.head.localEulerAngles.y;
+            pitch = Mathf.DeltaAngle(0, rig.head.localEulerAngles.x);
         }
 
         public static float Grip(HandSide side)

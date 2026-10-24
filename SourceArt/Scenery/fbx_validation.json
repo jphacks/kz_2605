@@ -1,0 +1,22 @@
+{
+  "ReefButterfly": {
+    "fbx_reimport": true,
+    "meshes": 2,
+    "vertices": 2916
+  },
+  "ReefClownfish": {
+    "fbx_reimport": true,
+    "meshes": 2,
+    "vertices": 2916
+  },
+  "ReefTang": {
+    "fbx_reimport": true,
+    "meshes": 2,
+    "vertices": 2916
+  },
+  "FishingBoat": {
+    "fbx_reimport": true,
+    "meshes": 1,
+    "vertices": 16274
+  }
+}

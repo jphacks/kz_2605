@@ -2,11 +2,13 @@ using UnityEngine;
 
 namespace JPHACKS2026
 {
-    /// <summary>手を物に近づけてグリップを握るとつかみ、離すと手放す（投げられる）。</summary>
+    /// <summary>手を物に近づけてトリガーを握るとつかみ、離すと手放す（投げられる）。</summary>
     [RequireComponent(typeof(Hand))]
     public class HandGrabber : MonoBehaviour
     {
         public float grabRadius = 0.09f;
+        [Tooltip("オン：人差し指トリガーで持つ。オフ：従来のグリップで持つ")]
+        public bool useTrigger = true;
 
         public Grabbable Held { get; private set; }
 
@@ -21,7 +23,7 @@ namespace JPHACKS2026
             var gm = GameManager.Instance;
             if (gm != null && gm.IsPaused) return;
 
-            bool pressed = hand.GripPressed;
+            bool pressed = useTrigger ? hand.TriggerPressed : hand.GripPressed;
             if (pressed && !wasPressed) TryGrab();
             else if (!pressed && wasPressed && Held != null) ReleaseHeld(true);
             wasPressed = pressed;

@@ -6,7 +6,7 @@ using UnityEngine;
 namespace JPHACKS2026
 {
     /// <summary>
-    /// 「おとぎ配信」の配信機能。Firebase Realtime Database を介して、スマホ等の視聴ページとつなぐ。
+    /// 「童話配信」の配信機能。Firebase Realtime Database を介して、スマホ等の視聴ページとつなぐ。
     /// 送る：場面・字幕・選択肢・エンディング・VR視点の画像（rooms/{room}/state, choice, ending, frame）
     /// 受け取る：視聴者が書く投票・コメント・視聴者数（rooms/{room}/audience/votes, comments, viewers）
     ///

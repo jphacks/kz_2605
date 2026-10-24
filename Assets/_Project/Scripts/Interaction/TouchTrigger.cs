@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace JPHACKS2026
 {
-    /// <summary>手が触れたら成立。minSpeedを上げると「追い払う」「叩く」、requireGripで「手を置いて握る」。</summary>
+    /// <summary>手が触れたら成立。minSpeedで「追い払う」「叩く」、requireGrip（互換用の名前）でトリガー操作も要求する。</summary>
     public class TouchTrigger : BranchTrigger
     {
         public float minSpeed;
@@ -32,7 +32,7 @@ namespace JPHACKS2026
             {
                 if (h == null) continue;
                 if (h.Speed < minSpeed) continue;
-                if (requireGrip && !h.GripPressed) continue;
+                if (requireGrip && !h.TriggerPressed) continue;
                 Fire();
                 return;
             }

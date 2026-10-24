@@ -12,6 +12,7 @@ namespace JPHACKS2026
             public string label;
             public string hint;
             public BranchTrigger[] triggers;
+            public bool button;
 
             public Option(string label, string hint, params BranchTrigger[] triggers)
             {

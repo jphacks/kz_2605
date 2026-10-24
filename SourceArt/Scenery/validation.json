@@ -1,0 +1,18 @@
+{
+  "ReefButterfly": {
+    "vertices": 2916,
+    "meshes": 2
+  },
+  "ReefClownfish": {
+    "vertices": 2916,
+    "meshes": 2
+  },
+  "ReefTang": {
+    "vertices": 2916,
+    "meshes": 2
+  },
+  "FishingBoat": {
+    "vertices": 16274,
+    "meshes": 1
+  }
+}

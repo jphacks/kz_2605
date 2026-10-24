@@ -62,7 +62,7 @@ namespace JPHACKS2026
             PauseMenu = MenuPanel.Create("PauseMenu", 50);
             narration.Bind(Subtitle);
             // 配信（LiveStreamConfig が設定されているときだけ）：Webの視聴ページとつなぎ、コメントを弾幕で流す
-            if (LiveStream.Create(rig.head) is { } live) DanmakuView.Create(live);
+            if (!Application.isBatchMode && LiveStream.Create(rig.head) is { } live) DanmakuView.Create(live);
             CreateTitleHud();
         }
 
@@ -88,6 +88,7 @@ namespace JPHACKS2026
 
         void Cleanup()
         {
+            if (endings != null) endings.ClearEffects();
             if (IsPaused)
             {
                 Time.timeScale = 1;
@@ -201,7 +202,7 @@ namespace JPHACKS2026
             var menuAnchor = StoryAnchor.Get("title.menu");
             void ShowTitleMenu()
             {
-                Menu.Show("おとぎ配信", "絵本の世界へ入ります\n<size=80%>チャプターを選ぶと、その選択肢から始まります</size>", items.ToArray());
+                Menu.Show("童話配信", "絵本の世界へ入ります\n<size=80%>チャプターを選ぶと、その選択肢から始まります</size>", items.ToArray());
                 Menu.PlaceAt(menuAnchor);
             }
             items.Add(("目線調節", () => { ShowEyeMenu(Menu, ShowTitleMenu); Menu.PlaceAt(menuAnchor); }));
@@ -234,10 +235,9 @@ namespace JPHACKS2026
             hud = canvas.gameObject;
             // 窓の格子や月に重なっても読めるよう、文字の後ろに板を敷き、縁取りをつける
             UIFactory.CreateImage(canvas.transform, "Backdrop", UIFactory.PanelColor, new Vector2(1300, 640));
-            UIFactory.CreateImage(canvas.transform, "Line", new Color(0.95f, 0.75f, 0.3f, 0.8f), new Vector2(900, 4), new Vector2(0, 30));
-            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Title", "おとぎ配信", 150, UIFactory.PaperColor, new Vector2(1300, 220), new Vector2(0, 170)), 0.2f);
+            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Title", "童話配信", 150, UIFactory.PaperColor, new Vector2(1300, 220), new Vector2(0, 170)), 0.2f);
             UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Sub", "〜 え！本当に… 絵本の世界へ 〜", 58, new Color(1, 0.88f, 0.6f), new Vector2(1300, 90), new Vector2(0, 75)), 0.15f);
-            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Guide", "目の前の絵本に手をのばして\nグリップボタンで開こう", 54, Color.white, new Vector2(1300, 160), new Vector2(0, -90)), 0.15f);
+            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Guide", "目の前の絵本に手をのばして\n人差し指のトリガーで開こう", 54, Color.white, new Vector2(1300, 160), new Vector2(0, -90)), 0.15f);
             hudText = UIFactory.CreateText(canvas.transform, "Count", "", 40, new Color(1, 1, 1, 0.85f), new Vector2(1240, 110), new Vector2(0, -250));
         }
 
@@ -252,7 +252,7 @@ namespace JPHACKS2026
         // ── エンディング後 ───────────────────────────
 
         /// <summary>絵本が閉じて「おわり」。達成数を表示し、タイトルか直前の選択肢へ戻る。</summary>
-        public IEnumerator Owari(EndingId id)
+        public IEnumerator Owari(EndingId id, bool compact = false)
         {
             State = GameState.Menu;
             if (LiveStream.Instance != null)
@@ -263,7 +263,7 @@ namespace JPHACKS2026
             narration.Stop();
             // 物語の世界が光にほどけ、絵本の中から部屋へ戻される（入るときの逆）：
             // 光に包まれる → 開いた絵本が強く光った状態で部屋が現れる → 光がページへ吸い込まれていく
-            yield return Fader.FadeTo(new Color(1f, 0.97f, 0.9f), 1, 1.8f);
+            yield return Fader.FadeTo(new Color(1f, 0.97f, 0.9f), 1, compact ? .65f : 1.8f);
             rig.RideAnchor = null;
             rig.SetAgedHands(false);
             SwitchArea("title");
@@ -271,13 +271,17 @@ namespace JPHACKS2026
             var book = StoryAnchor.Get<Picturebook>("title.book");
             book.SetOpenImmediate(true);
             book.SetGlow(1f);
-            yield return Tween.Wait(0.6f);
-            StartCoroutine(book.GlowTo(0.2f, 3.0f));   // 光が引いて、物語を終えたページがほのかに光る
-            yield return Fader.FadeIn(2.2f);
-            yield return Tween.Wait(0.8f);
-            yield return Medetashi();
-            StartCoroutine(book.GlowTo(0f, 1.2f));
-            yield return book.Close();
+            if (!compact) yield return Tween.Wait(0.6f);
+            StartCoroutine(book.GlowTo(0.2f, compact ? 1.4f : 3.0f));   // 光が引いて、物語を終えたページがほのかに光る
+            yield return Fader.FadeIn(compact ? 1.2f : 2.2f);
+            if (compact) yield return Tween.Wait(.4f);
+            if (!compact)
+            {
+                yield return Tween.Wait(0.8f);
+                yield return Medetashi();
+            }
+            StartCoroutine(book.GlowTo(0f, compact ? .9f : 1.2f));
+            yield return book.Close(compact ? 1.1f : 1.4f);
 
             bool isNew = SaveData.RecordEnding(id);
             SaveData.ClearCheckpoint();

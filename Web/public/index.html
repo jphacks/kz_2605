@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2a2140">
-  <title>おとぎ配信</title>
+  <title>童話配信</title>
   <meta name="description" content="VRで絵本の世界に入った体験者を、リアルタイムで見守り、物語の選択肢に投票できる配信ページ">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +14,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-title">おとぎ配信</span>
+      <span class="brand-title">童話配信</span>
       <span class="brand-sub">え！本当に… 絵本の世界へ</span>
     </div>
     <div class="status">
@@ -60,18 +60,32 @@
         <div id="ending-title" class="ending-title"></div>
         <div id="ending-genre" class="ending-genre"></div>
       </div>
+      <section id="feedback" class="card feedback" hidden aria-labelledby="feedback-title">
+        <h2 id="feedback-title" class="card-title">物語はいかがでしたか？</h2>
+        <p>感想をタップして、ひとこと残してね。物語が終わったあとも送れます。</p>
+        <div class="feedback-ratings" role="group" aria-label="物語の感想">
+          <button type="button" data-rating="good" aria-pressed="false">👍 よかった</button>
+          <button type="button" data-rating="bad" aria-pressed="false">💭 いまひとつ</button>
+        </div>
+        <form id="feedback-form" class="feedback-form">
+          <label for="feedback-text">感想コメント</label>
+          <textarea id="feedback-text" maxlength="60" rows="2" placeholder="よかったところ、気になったところ（60文字まで）" required></textarea>
+          <button type="submit">感想を送る</button>
+        </form>
+        <p id="feedback-status" role="status" aria-live="polite"></p>
+      </section>
     </section>
 
     <aside class="side">
-      <section id="choice" class="card choice" hidden>
+      <section id="choice" class="card choice" aria-label="現在の投票">
         <div class="choice-head">
-          <span class="choice-label">みんなで決めよう</span>
+          <span id="choice-status" class="choice-label" role="status">現在の投票 · 待機中</span>
           <span id="choice-timer" class="choice-timer"></span>
         </div>
-        <h2 id="choice-question" class="choice-question"></h2>
+        <h2 id="choice-question" class="choice-question">物語の選択肢が出ると、ここで投票できます</h2>
         <div id="choice-timebar" class="timebar"><div></div></div>
         <div id="choice-options" class="options"></div>
-        <p id="choice-note" class="choice-note">体験者より先に締め切りが来ると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。</p>
+        <p id="choice-note" class="choice-note">好きな選択肢を1つタップして投票。締め切りまで変更できます。</p>
       </section>
 
       <section class="card comments">

@@ -12,6 +12,7 @@ namespace JPHACKS2026
         public float SpeedMultiplier { get; set; } = 1f;
 
         float angle;
+        public float Phase { get => angle; set => angle = value; }
 
         void Awake()
         {

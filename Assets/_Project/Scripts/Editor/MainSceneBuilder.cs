@@ -851,18 +851,12 @@ namespace JPHACKS2026.Editor
             Prim(PrimitiveType.Cylinder, "Grill", r, new Vector3(0, 1.28f, 0), new Vector3(0.075f, 0.02f, 0.075f), black, collider: false);
         }
 
-        /// <summary>窓の外：月夜の海と星空、水平線の向こうにかすかに光る竜宮城。</summary>
+        /// <summary>窓の外：月夜の海と星空。</summary>
         static void BuildTitleNightView(Transform t)
         {
             Prim(PrimitiveType.Cube, "SkyBackdrop", t, new Vector3(0, 8, 30), new Vector3(60, 30, 0.1f), Mat("NightSky", new Color(0.04f, 0.06f, 0.18f), unlit: true), collider: false);
             Prim(PrimitiveType.Cube, "NightSea", t, new Vector3(0, -0.4f, 17), new Vector3(60, 0.05f, 26), Mat("NightSea", new Color(0.03f, 0.08f, 0.2f), unlit: true), collider: false);
             Prim(PrimitiveType.Sphere, "Moon", t, new Vector3(5.5f, 9f, 28f), Vector3.one * 3.2f, Mat("Moon", new Color(1f, 0.96f, 0.82f), 2.5f, unlit: true), collider: false);
-            Prim(PrimitiveType.Cube, "MoonReflection", t, new Vector3(3.2f, -0.36f, 18f), new Vector3(0.5f, 0.01f, 20f), Mat("MoonReflection", new Color(0.9f, 0.85f, 0.6f), 1.5f, unlit: true), collider: false);
-            // 水平線の竜宮城のシルエット
-            var castle = Mat("CastleGlow", new Color(0.9f, 0.35f, 0.3f), 1.2f, unlit: true);
-            Prim(PrimitiveType.Cube, "Castle", t, new Vector3(-6f, 0.4f, 29.5f), new Vector3(3f, 1.4f, 0.1f), castle, collider: false);
-            Prim(PrimitiveType.Cube, "CastleTower", t, new Vector3(-6f, 1.6f, 29.5f), new Vector3(1.2f, 1.6f, 0.1f), castle, collider: false);
-            Prim(PrimitiveType.Cube, "CastleRoof", t, new Vector3(-6f, 2.5f, 29.5f), new Vector3(2f, 0.25f, 0.1f), castle, collider: false);
 
             var rnd = new System.Random(7);
             var star = Mat("Star", new Color(1f, 0.95f, 0.8f), 2f, unlit: true);

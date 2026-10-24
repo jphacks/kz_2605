@@ -104,9 +104,46 @@ namespace JPHACKS2026
             var d = transform.position - from;
             d.y = 0;
             if (d.sqrMagnitude < 0.01f) d = transform.forward;
+            FleeTo(transform.position + d.normalized * distance, speed);
+        }
+
+        public void FleeTo(Vector3 destination, float speed)
+        {
+            StopAllCoroutines();
+            lookTarget = null;
+            lookAtPlayer = false;
             idle = Idle.Hop;
             idleSpeed = 12f;
-            StartMoveTo(transform.position + d.normalized * distance, speed);
+            StartMoveTo(destination, speed);
+        }
+
+        public IEnumerator BullyTarget(Transform target, float duration)
+        {
+            lookTarget = target; lookAtPlayer = false; idle = Idle.None;
+            var torso = body.Find("Torso");
+            float h = torso != null ? torso.localScale.y / .36f : 1.15f;
+            var shoulder = body.Find("Bully arm");
+            if (shoulder == null)
+            {
+                shoulder = new GameObject("Bully arm").transform;
+                shoulder.SetParent(body,false); shoulder.localPosition = new Vector3(h*.15f,h*.58f,0);
+                var arm = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                arm.transform.SetParent(shoulder,false); arm.transform.localPosition = new Vector3(0,-h*.12f,0);
+                arm.transform.localScale = new Vector3(h*.085f,h*.15f,h*.085f);
+                var col = arm.GetComponent<Collider>(); col.enabled=false; Destroy(col);
+                if(torso != null) arm.GetComponent<Renderer>().sharedMaterial=torso.GetComponent<Renderer>().sharedMaterial;
+            }
+            var rest = body.localRotation;
+            float elapsed=0;
+            while(elapsed<duration)
+            {
+                elapsed+=Time.deltaTime;
+                float strike=Mathf.Pow((Mathf.Sin(elapsed*7)+1)*.5f,3);
+                shoulder.localRotation=Quaternion.Euler(Mathf.Lerp(-145,-35,strike),0,-12);
+                body.localRotation=rest*Quaternion.Euler(8+strike*22,0,0);
+                yield return null;
+            }
+            body.localRotation=rest; shoulder.localRotation=Quaternion.identity;
         }
     }
 }

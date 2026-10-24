@@ -1,4 +1,4 @@
-// おとぎ配信 視聴ページ。Firebase Realtime Database からリアルタイムに受け取り、投票・コメントを書き込む。
+// 童話配信 視聴ページ。Firebase Realtime Database からリアルタイムに受け取り、投票・コメントを書き込む。
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getDatabase, ref, onValue, onChildAdded, set, push, query, limitToLast,
@@ -111,6 +111,7 @@ function updateLive() {
   const hostLost = !closed && data.frame?.t != null && frameAge() > STALL_MS;
   const selfLost = !connected && everConnected && Date.now() - disconnectedSince > OFFLINE_MS;
   const ended = closed || hostLost || selfLost;
+  $("feedback").hidden = !data.ending && !closed;
   const fresh = connected && !ended && frameAge() < STALL_MS;
 
   const badge = $("live-badge");
@@ -154,6 +155,7 @@ function renderState() {
 function renderEnding() {
   const e = data.ending;
   $("ending").hidden = !e || !$("thanks").hidden;
+  $("feedback").hidden = !e && data.state?.phase !== "ended";
   if (!e) return;
   $("ending-title").textContent = `『${e.title}』`;
   $("ending-genre").textContent = `${e.id}　${e.genre}`;
@@ -163,32 +165,54 @@ function renderEnding() {
 let choiceId = null;
 let remainingAt = 0;        // remaining を受け取った時刻（カウントダウンの補間用）
 let lastRemaining = null;
+let renderedOptions = null;
 
 function remainingSeconds(choice) {
   if (!choice || choice.status !== "open") return 0;
   return Math.max(0, (choice.remaining ?? 0) - (Date.now() - remainingAt) / 1000);
 }
 
-function castVote(index) {
+async function castVote(index) {
   const choice = data.choice;
   if (!choice || choice.status !== "open") return;
-  set(roomRef(`audience/votes/${choice.id}/${viewerId}`), index);
+  try {
+    await set(roomRef(`audience/votes/${choice.id}/${viewerId}`), index);
+  } catch {
+    $("choice-note").textContent = "投票を送れませんでした。接続を確認して、もう一度タップしてください。";
+  }
 }
 
 function renderChoice() {
   const choice = data.choice;
   const card = $("choice");
-  if (!choice) { card.hidden = true; choiceId = null; return; }
+  if (!choice) {
+    card.hidden = false;
+    card.classList.remove("voting-open");
+    document.body.classList.remove("voting-open");
+    choiceId = null;
+    renderedOptions = null;
+    lastRemaining = null;
+    $("choice-status").textContent = "現在の投票 · 待機中";
+    $("choice-question").textContent = "物語の選択肢が出ると、ここで投票できます";
+    $("choice-options").replaceChildren();
+    $("choice-timer").textContent = "";
+    $("choice-timebar").hidden = true;
+    $("choice-note").textContent = "好きな選択肢を1つタップして投票。締め切りまで変更できます。";
+    return;
+  }
   if (choiceId !== choice.id) {
     choiceId = choice.id;
     card.hidden = false;
-    // スマホでは、選択肢が出たら投票カードを見える位置に
-    if (matchMedia("(max-width: 900px)").matches) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    lastRemaining = null;
   }
   if (choice.remaining !== lastRemaining) { lastRemaining = choice.remaining; remainingAt = Date.now(); }
   card.hidden = false;
 
   const open = choice.status === "open";
+  card.classList.toggle("voting-open", open);
+  document.body.classList.toggle("voting-open", open);
+  $("choice-status").textContent = open ? "現在の投票 · 受付中" : "現在の投票 · 結果";
+  $("choice-timebar").hidden = false;
   const options = choice.options || [];
   const votes = get(`votes/${choice.id}`) || {};
   const counts = options.map(() => 0);
@@ -197,34 +221,43 @@ function renderChoice() {
   const mine = votes[viewerId];
 
   $("choice-question").textContent = choice.question;
-  $("choice-options").replaceChildren(...options.map((o, i) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "option";
-    btn.disabled = !open;
-    if (mine === i) btn.classList.add("mine");
-    if (!open && choice.result === i) btn.classList.add("winner");
+  const optionKey = JSON.stringify([choice.id, options.map(o => o.label)]);
+  const optionRoot = $("choice-options");
+  if (renderedOptions !== optionKey) {
+    renderedOptions = optionKey;
+    optionRoot.replaceChildren(...options.map((o, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "option";
+      btn.innerHTML = `<span class="fill"></span><span class="row"><span class="label"></span><span class="count"></span></span><span class="hint"></span>`;
+      btn.addEventListener("click", () => castVote(i));
+      return btn;
+    }));
+  }
+  options.forEach((o, i) => {
+    const btn = optionRoot.children[i];
     const pct = total ? Math.round((counts[i] / total) * 100) : 0;
-    btn.innerHTML = `<span class="fill" style="width:${pct}%"></span>
-      <span class="row"><span class="label"></span><span class="count">${counts[i]}票・${pct}%</span></span>
-      <span class="hint"></span>`;
+    btn.disabled = !open;
+    btn.classList.toggle("mine", mine === i);
+    btn.classList.toggle("winner", !open && choice.result === i);
+    btn.setAttribute("aria-pressed", String(mine === i));
+    btn.querySelector(".fill").style.width = `${pct}%`;
+    btn.querySelector(".count").textContent = `${counts[i]}票・${pct}%`;
     btn.querySelector(".label").textContent = (mine === i ? "✓ " : "") + o.label;
-    btn.querySelector(".hint").textContent = o.hint || "";
-    btn.addEventListener("click", () => castVote(i));
-    return btn;
-  }));
+    btn.querySelector(".hint").textContent = mine === i ? "投票済み · 締め切りまで変更できます" : "タップして投票";
+  });
 
   const note = $("choice-note");
   if (open) {
     note.className = "choice-note";
-    note.textContent = "体験者より先に締め切りが来ると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。";
+    note.textContent = "① 選択肢を1つタップ → ② ✓ が付けば投票完了。時間になると投票1位が物語に反映されます（体験者の選択が優先）。";
   } else {
     const label = options[choice.result]?.label;
     note.className = "choice-note result";
     note.textContent =
       choice.decidedBy === "viewers" ? `時間切れ！ みんなの投票で「${label}」に決まりました` :
       choice.decidedBy === "player" ? `体験者が「${label}」を選びました` :
-      "時間切れ… 物語は進みませんでした";
+      label ? `操作がなかったため「${label}」で物語を続けます` : "投票は終了しました";
   }
   tick();
 }
@@ -310,7 +343,7 @@ const REACTIONS = [
   { key: "love", emoji: "💖", word: "すてき" },
   { key: "cheer", emoji: "📣", word: "がんばれ" },
 ];
-const REACTION_COOLDOWN_MS = 400;
+const REACTION_COOLDOWN_MS = 100;
 let lastReactionAt = 0;
 
 $("reactions").replaceChildren(...REACTIONS.map((r) => {
@@ -325,6 +358,41 @@ $("reactions").replaceChildren(...REACTIONS.map((r) => {
   });
   return btn;
 }));
+
+// 感想は既存のコメントにも残すので、配信終了後も同じ接続で送れる。
+for (const button of document.querySelectorAll("[data-rating]")) {
+  button.addEventListener("click", async () => {
+    const status = $("feedback-status");
+    button.disabled = true;
+    try {
+      await push(roomRef("audience/comments"), {
+        name: nameInput.value.trim() || "名無しの村人",
+        text: button.dataset.rating === "good" ? "【物語の感想】👍 よかった" : "【物語の感想】💭 いまひとつ",
+        vid: viewerId, ending: data.ending?.id || "", feedback: button.dataset.rating, t: serverTimestamp(),
+      });
+      for (const other of document.querySelectorAll("[data-rating]")) other.setAttribute("aria-pressed", String(other === button));
+      status.textContent = "感想を送りました。ありがとうございます！";
+    } catch { status.textContent = "送信できませんでした。接続を確認して、もう一度お試しください。"; }
+    finally { button.disabled = false; }
+  });
+}
+$("feedback-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = $("feedback-text");
+  const text = input.value.trim();
+  if (!text) return;
+  const button = event.currentTarget.querySelector("button");
+  button.disabled = true;
+  try {
+    await push(roomRef("audience/comments"), {
+      name: nameInput.value.trim() || "名無しの村人", text,
+      vid: viewerId, ending: data.ending?.id || "", feedback: "comment", t: serverTimestamp(),
+    });
+    input.value = "";
+    $("feedback-status").textContent = "感想コメントを送りました。ありがとうございます！";
+  } catch { $("feedback-status").textContent = "送信できませんでした。入力は残っています。もう一度お試しください。"; }
+  finally { button.disabled = false; }
+});
 
 // ページを開いたあとのリアクション（自分のものも含む）を画面に浮かべる
 onChildAdded(query(roomRef("audience/reactions"), limitToLast(10)), (snap) => {

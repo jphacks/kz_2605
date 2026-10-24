@@ -1,11 +1,11 @@
 namespace JPHACKS2026
 {
-    public enum EndingId { ED1 = 1, ED2, ED3, ED4, ED5, ED6, ED7 }
+    public enum EndingId { ED1 = 1, ED2, ED3, ED4, ED5, ED6, ED7, ED8, ED9 }
 
-    /// <summary>7つのエンディングの名前とジャンル（内容は仮案。02 ストーリー仕様書）。</summary>
+    /// <summary>9つのエンディングの名前とジャンル。</summary>
     public static class EndingCatalog
     {
-        public const int Count = 7;
+        public const int Count = 9;
 
         public static string Title(EndingId id) => id switch
         {
@@ -16,6 +16,8 @@ namespace JPHACKS2026
             EndingId.ED5 => "終わらない宴",
             EndingId.ED6 => "玉手箱の煙",
             EndingId.ED7 => "新しい人生",
+            EndingId.ED8 => "託された玉手箱",
+            EndingId.ED9 => "竜宮城からの脱出",
             _ => "",
         };
 
@@ -26,6 +28,8 @@ namespace JPHACKS2026
             EndingId.ED5 => "ミステリー",
             EndingId.ED6 => "通常エンド",
             EndingId.ED7 => "感動",
+            EndingId.ED8 => "もうひとつの結末",
+            EndingId.ED9 => "脱出",
             _ => "",
         };
     }

@@ -32,6 +32,13 @@ belly = material('Plastron • sand', (.72, .69, .40))
 black = material('Eyes • obsidian', (.009, .022, .023), .16)
 white = material('Eyes • catchlight', (.92, 1, .94), .2)
 parts = []
+# Linear colors: richer natural pigment, with restrained highlights.
+for mat, color in [(skin,(.075,.19,.12)), (light,(.24,.34,.16)),
+                   (shell,(.038,.052,.019)), (scute,(.17,.20,.055)),
+                   (scute2,(.27,.24,.075)), (rim,(.38,.32,.13)),
+                   (belly,(.56,.43,.22))]:
+    mat.diffuse_color = (*color,1)
+    mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*color,1)
 
 def finish(obj, name, mat, bone):
     obj.name = name
@@ -44,7 +51,7 @@ def finish(obj, name, mat, bone):
     parts.append(obj)
     return obj
 
-def ellipsoid(name, loc, scale, mat, bone='Body', segments=32, rings=20):
+def ellipsoid(name, loc, scale, mat, bone='Body', segments=24, rings=16):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=rings, location=loc)
     obj = bpy.context.object
     obj.scale = scale
@@ -58,60 +65,156 @@ ellipsoid('Carapace rim', (0, .02, .08), (.78, 1.00, .14), rim)
 ellipsoid('Carapace', (0, .03, .16), (.745, .965, .40), shell)
 
 # Individually modelled scutes sit on the curved shell with dark gaps.
+groove = material('Shell growth lines', (.20, .28, .105))
+amber = material('Iris amber', (.47, .29, .065), .28)
+
+def tube(name, points, radius, mat, bone='Body'):
+    curve = bpy.data.curves.new(name, 'CURVE')
+    curve.dimensions = '3D'
+    curve.resolution_u = 1
+    curve.bevel_depth = radius
+    curve.bevel_resolution = 1
+    spline = curve.splines.new('POLY')
+    spline.points.add(len(points)-1)
+    for p, co in zip(spline.points, points):
+        p.co = (*co, 1)
+    obj = bpy.data.objects.new(name, curve)
+    bpy.context.collection.objects.link(obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.convert(target='MESH')
+    return finish(bpy.context.object, name, mat, bone)
+
 def shell_height(x, y):
     return .16 + .40 * math.sqrt(max(.015, 1 - (x/.745)**2 - ((y-.03)/.965)**2))
 
 def plate(name, points, mat):
     cx = sum(p[0] for p in points) / len(points)
     cy = sum(p[1] for p in points) / len(points)
-    points = [(cx+(x-cx)*.94, cy+(y-cy)*.94) for x,y in points]
-    verts = [(cx, cy, shell_height(cx,cy)+.025)]
-    verts += [(x,y,shell_height(x,y)+.014) for x,y in points]
+    points = [(cx+(x-cx)*.987, cy+(y-cy)*.987) for x,y in points]
+    verts = [(cx, cy, shell_height(cx,cy)+.008)]
+    verts += [(x,y,shell_height(x,y)+.008) for x,y in points]
     faces = [(0, i+1, (i+1)%len(points)+1) for i in range(len(points))]
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
     bm = bmesh.new()
     bm.from_mesh(mesh)
-    bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=5, use_grid_fill=True)
+    bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=3, use_grid_fill=True)
     for vertex in bm.verts:
-        vertex.co.z = shell_height(vertex.co.x, vertex.co.y) + .022
+        vertex.co.z = shell_height(vertex.co.x, vertex.co.y) + .008
     bm.to_mesh(mesh)
     bm.free()
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
     finish(obj, name, mat, 'Body')
     solid = obj.modifiers.new('Scute thickness', 'SOLIDIFY')
-    solid.thickness = .012
+    solid.thickness = .006
     bevel = obj.modifiers.new('Soft scute edges', 'BEVEL')
-    bevel.width = .012
+    bevel.width = .003
     bevel.segments = 2
     bpy.context.view_layer.objects.active = obj
     for mod in list(obj.modifiers):
         bpy.ops.object.modifier_apply(modifier=mod.name)
+    # Three concentric raised growth lines follow the dome, exported as geometry.
+    for inset in [.42, .58, .73, .86]:
+        line = []
+        for j in range(len(points)):
+            a, b = points[j], points[(j+1)%len(points)]
+            for step in range(5):
+                t = step/5
+                x = cx + ((a[0]*(1-t)+b[0]*t)-cx)*inset
+                y = cy + ((a[1]*(1-t)+b[1]*t)-cy)*inset
+                line.append((x, y, shell_height(x,y)+.009))
+        tube(name+' growth', line+[line[0]], .0009, groove)
 
-for i in range(4):
-    y = -.64 + i*.405
-    plate('Vertebral scute %02d'%i, [(0,y-.21),(.235,y-.12),(.24,y+.12),(0,y+.21),(-.24,y+.12),(-.235,y-.12)], scute2)
-for side in [-1, 1]:
-    for i in range(4):
-        y = -.61+i*.39
-        pts = [(.255,y-.16),(.50,y-.20),(.665,y-.07),(.64,y+.16),(.43,y+.22),(.255,y+.13)]
-        # Pull the outer plates into the shell ellipse near its ends.
-        pts = [(side*x*math.sqrt(max(.25, 1-(yy/.99)**2)), yy) for x,yy in pts]
-        plate('Costal %s %02d'%(side,i), pts, scute if i%2 else scute2)
+# Clip a shared tessellation against the shell outline: adjoining scutes fit
+# exactly, rather than independent polygons leaving broad empty channels.
+seeds = [(0,-.72+i*.36) for i in range(5)]
+seeds += [(s*.54,-.57+i*.38) for s in [-1,1] for i in range(4)]
+outline = [(.865*math.cos(i*2*math.pi/96), .865*math.sin(i*2*math.pi/96)) for i in range(96)]
+for index, (sx,sy) in enumerate(seeds):
+    poly = outline[:]
+    for tx,ty in seeds:
+        if (tx,ty)==(sx,sy): continue
+        nx,ny=tx-sx,ty-sy
+        limit=(tx*tx+ty*ty-sx*sx-sy*sy)/2
+        clipped=[]
+        for a,b in zip(poly,poly[1:]+poly[:1]):
+            da=a[0]*nx+a[1]*ny-limit
+            db=b[0]*nx+b[1]*ny-limit
+            if da<=0: clipped.append(a)
+            if (da<=0)!=(db<=0):
+                t=da/(da-db)
+                clipped.append((a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])))
+        poly=clipped
+        if not poly: break
+    if len(poly)>=3:
+        plate(('Vertebral' if index<5 else 'Costal')+' scute %02d'%index,
+              [(.745*x,.03+.965*y) for x,y in poly], scute2 if index%3 else scute)
+
+# A continuous ring of 26 marginal shields makes the silhouette read as a shell.
+for i in range(26):
+    a0, a1 = 2*math.pi*(i+.045)/26, 2*math.pi*(i+.955)/26
+    pts = []
+    for r, angles in [(.87,[a0,(a0+a1)/2,a1]),(.994,[a1,(a0+a1)/2,a0])]:
+        for a in angles:
+            pts.append((.745*r*math.cos(a), .03+.965*r*math.sin(a)))
+    plate('Marginal shield %02d'%i, pts, rim if i%3 else scute2)
 
 ellipsoid('Neck', (0,-.92,.015), (.245,.36,.20), skin, 'Head')
-ellipsoid('Head', (0,-1.23,.065), (.30,.37,.245), skin, 'Head')
-ellipsoid('Muzzle', (0,-1.48,-.005), (.25,.17,.13), light, 'Head')
-ellipsoid('Lower jaw', (0,-1.435,-.085), (.225,.17,.045), belly, 'Head')
-for s in [-1, 1]:
-    ellipsoid('Eye socket', (s*.247,-1.30,.16), (.075,.115,.09), light, 'Head')
-    ellipsoid('Eye', (s*.291,-1.325,.18), (.036,.066,.060), black, 'Head')
-    ellipsoid('Eye glint', (s*.314,-1.35,.202), (.012,.018,.017), white, 'Head',16,12)
-    ellipsoid('Nostril', (s*.09,-1.62,.048), (.021,.012,.014), black, 'Head',16,12)
-    for j in range(3):
-        ellipsoid('Cheek scale', (s*(.22-j*.025),-1.12+j*.10,.22), (.045,.06,.015), light, 'Head',16,12)
+# A single continuous head surface replaces the spherical head/muzzle/jaw stack.
+# Cross sections taper into a short beak and blend back into the neck.
+head_sections = [(-1.65,.018,.042,.005),(-1.62,.105,.077,.012),
+                 (-1.54,.195,.115,.020),(-1.43,.247,.163,.030),
+                 (-1.30,.265,.192,.035),(-1.16,.252,.190,.035),
+                 (-1.02,.210,.162,.025),(-.89,.170,.140,.015)]
+verts=[]
+for y,w,h,cz in head_sections:
+    for k in range(32):
+        a=2*math.pi*k/32
+        verts.append((w*math.cos(a),y,cz+h*math.sin(a)))
+faces=[]
+for j in range(len(head_sections)-1):
+    for k in range(32):
+        faces.append((j*32+k,(j+1)*32+k,(j+1)*32+(k+1)%32,j*32+(k+1)%32))
+faces += [tuple(reversed(range(32))),tuple((len(head_sections)-1)*32+k for k in range(32))]
+mesh=bpy.data.meshes.new('Continuous head')
+mesh.from_pydata(verts,[],faces)
+mesh.update()
+obj=bpy.data.objects.new('Head',mesh)
+bpy.context.collection.objects.link(obj)
+finish(obj,'Head',skin,'Head')
+bm=bmesh.new()
+bm.from_mesh(mesh)
+bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
+bm.to_mesh(mesh)
+bm.free()
+bpy.context.view_layer.objects.active=obj
+sub=obj.modifiers.new('Continuous head contours','SUBSURF')
+sub.levels=2
+bpy.ops.object.modifier_apply(modifier=sub.name)
+
+def head_surface(y,z):
+    a,b=next((a,b) for a,b in zip(head_sections,head_sections[1:]) if a[0]<=y<=b[0])
+    t=(y-a[0])/(b[0]-a[0])
+    w,h,cz=[a[k]*(1-t)+b[k]*t for k in range(1,4)]
+    return w*math.sqrt(max(0,1-((z-cz)/h)**2))
+
+for s in [-1,1]:
+    # Small lateral eyes seated in the head, without a projecting pale socket.
+    ellipsoid('Eye lid', (s*.231,-1.335,.122), (.025,.060,.051), skin,'Head')
+    ellipsoid('Iris', (s*.250,-1.344,.125), (.013,.035,.033), amber,'Head')
+    ellipsoid('Eye', (s*.259,-1.350,.126), (.009,.025,.027), black,'Head')
+    ellipsoid('Eye glint', (s*.266,-1.362,.139), (.003,.006,.006), white,'Head',12,8)
+    ellipsoid('Nostril', (s*.055,-1.616,.063), (.010,.006,.006), black,'Head',12,8)
+    mouth=[]
+    for i in range(33):
+        y=-1.645+i*.009
+        z=-.027+.012*(i/32)**2
+        mouth.append((s*(head_surface(y,z)-.003),y,z))
+    tube('Beak mouth seam',mouth,.0025,shell,'Head')
 
 def flipper(name, side, front):
     bone = ('Front' if front else 'Rear') + ('.L' if side>0 else '.R')
@@ -138,9 +241,16 @@ def flipper(name, side, front):
     sub.levels=2
     bpy.context.view_layer.objects.active=obj
     bpy.ops.object.modifier_apply(modifier=sub.name)
-    for j in range(4 if front else 2):
-        dx=.18+j*.15
-        ellipsoid('Flipper scale', (x0+side*dx,y0+.05+dx*.40,-.045+.065-.06*dx), (.065,.09,.012), light,bone,16,10)
+    for j in range(13 if front else 6):
+        dx=.10+j*.063
+        a,b=next((a,b) for a,b in zip(sections,sections[1:]) if a[0]<=dx<=b[0])
+        t=(dx-a[0])/(b[0]-a[0])
+        dy,width,thick=[a[k]*(1-t)+b[k]*t for k in range(1,4)]
+        for row in [-2,-1,0,1,2]:
+            fraction=row*.31
+            z=-.045-.06*dx+thick*math.sqrt(1-fraction*fraction)
+            ellipsoid('Flipper mosaic scale', (x0+side*dx,y0+dy+fraction*width,z-.003), (.029,width*.145,.004), light if (j+row)%3 else scute,bone,10,6)
+    tube('Flipper leading edge', [(x0+side*dx,y0+dy-width*.78,-.045-.06*dx+.01) for dx,dy,width,thick in sections[1:]], .007, light, bone)
     return bone,(x0,y0,-.045),(x0+side*.5,y0+.18,-.07)
 
 bones=[]
@@ -248,7 +358,8 @@ for name,loc,power,size in [('Key', (1,-3,5),420,4),('Fill',(-3,-1,2),230,3),('R
     studio_object(lamp)
 scene.world.color=(.13,.13,.13)
 scene.render.engine='CYCLES'
-scene.cycles.samples=32
+scene.cycles.samples=64
+scene.cycles.use_denoising=True
 scene.render.resolution_x=1100
 scene.render.resolution_y=900
 scene.render.resolution_percentage=100
@@ -266,6 +377,9 @@ for screen in bpy.data.screens:
             area.spaces.active.region_3d.view_distance=5
             area.spaces.active.region_3d.view_location=(0,-.2,.1)
             area.spaces.active.shading.type='MATERIAL'
+scene.render.film_transparent=True
+scene.world.color=(.055,.065,.08)
+bpy.context.preferences.filepaths.save_version=0
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'SeaTurtle.blend'))
 bpy.ops.render.render(write_still=True)
 print('TURTLE_DONE',len(model.data.vertices),'vertices',len(model.data.polygons),'faces',list(bpy.data.actions.keys()))

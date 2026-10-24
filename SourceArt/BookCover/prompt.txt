@@ -1,0 +1,8 @@
+Use case: illustration-story.
+Asset type: flat front-cover artwork texture for a Japanese children's picture book in a Unity game. Landscape 3:2 composition, ideally 1536 x 1024 pixels.
+Primary request: an original, beautifully illustrated cover for the Japanese folk tale Urashima Taro.
+Subject: kind young Japanese fisherman Urashima Taro in traditional indigo fisherman clothing, riding on the back of a large friendly green sea turtle above elegant curling turquoise ocean waves. An enchanting red-and-gold Ryugu palace appears small in the distance, with a few colorful fish and soft clouds.
+Style: premium Japanese picture-book illustration, hand-painted watercolor and gouache on subtly textured ivory washi, gently inspired by traditional woodblock composition, warm and inviting, clear readable silhouettes, detailed but uncluttered.
+Composition: fill the entire rectangular image with the actual flat cover artwork. Large bold beautiful dark-indigo Japanese title across the upper quarter, the fisherman and turtle prominent in the lower center. A restrained thin vermilion-and-gold decorative border with generous safe margins.
+Text verbatim: "浦島太郎". Render exactly these four kanji, large and highly legible. No other words, no subtitle, no author, no English.
+Constraints: this is a texture to paste onto an existing book; NOT a photograph of a book, NOT a 3D mockup, no perspective distortion, no spine, no room or tabletop, no cast shadows around the rectangle, no watermarks. Opaque background.

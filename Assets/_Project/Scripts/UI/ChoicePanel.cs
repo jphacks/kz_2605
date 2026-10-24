@@ -7,7 +7,7 @@ namespace JPHACKS2026
 {
     /// <summary>
     /// アドベンチャーゲーム風の選択肢表示。選択肢の下に、対応する行動を薄く表示する。
-    /// 決定はボタンではなくVR内の行動で行う（10/23会議）。カウントダウン付き。
+    /// VR内の行動、または選択肢で指定したボタンで決定する。カウントダウン付き。
     /// 配信中は視聴者の投票の割合を各選択肢に表示し、時間切れのときは投票1位で決まる。
     /// </summary>
     public class ChoicePanel : MonoBehaviour
@@ -21,6 +21,8 @@ namespace JPHACKS2026
         readonly List<Image> voteBars = new();
         readonly List<TextMeshProUGUI> voteTexts = new();
         TextMeshProUGUI voteNote;
+        public int SelectedIndex { get; private set; } = -1;
+        bool acceptingInput;
 
         public static ChoicePanel Create()
         {
@@ -53,7 +55,9 @@ namespace JPHACKS2026
 
         public void Show(ChoiceDef def)
         {
-            foreach (var v in optionViews) Destroy(v);
+            SelectedIndex = -1;
+            acceptingInput = true;
+            foreach (var v in optionViews) { v.SetActive(false); Destroy(v); }
             optionViews.Clear();
             optionBgs.Clear();
             voteBars.Clear();
@@ -67,7 +71,15 @@ namespace JPHACKS2026
                 var o = def.options[i];
                 float x = -470f + (i + 0.5f) * (940f / n);
                 var obg = UIFactory.CreateImage(optionRoot, "Option" + i, new Color(0.98f, 0.94f, 0.85f, 0.95f), new Vector2(w, 300), new Vector2(x, 0));
-                UIFactory.CreateText(obg.transform, "Label", o.label, 46, new Color(0.15f, 0.1f, 0.08f), new Vector2(w - 30, 120), new Vector2(0, 55));
+                var label = UIFactory.CreateText(obg.transform, "Label", o.label, 46, new Color(0.15f, 0.1f, 0.08f), new Vector2(w - 30, 120), new Vector2(0, 55));
+                if (o.button)
+                {
+                    int index = i;
+                    obg.gameObject.AddComponent<VRButton>().Setup(obg, label, () =>
+                    {
+                        if (acceptingInput && !GameManager.Instance.IsPaused && SelectedIndex < 0) SelectedIndex = index;
+                    });
+                }
                 UIFactory.CreateText(obg.transform, "Hint", o.hint, 28, new Color(0.15f, 0.1f, 0.08f, 0.5f), new Vector2(w - 30, 110), new Vector2(0, -55));
                 optionViews.Add(obg.gameObject);
                 optionBgs.Add(obg);
@@ -114,13 +126,19 @@ namespace JPHACKS2026
             voteNote.text = "<color=#FFD27A>時間切れ！ 視聴者の投票で決まりました</color>";
         }
 
+        public void ShowAutoContinue()
+        {
+            voteNote.text = "時間になったので、物語を続けます";
+        }
+
         public void Highlight(int index)
         {
+            acceptingInput = false;
             for (int i = 0; i < optionBgs.Count; i++)
                 optionBgs[i].color = i == index ? new Color(1f, 0.82f, 0.45f) : new Color(0.98f, 0.94f, 0.85f, 0.4f);
             countdown.text = "";
         }
 
-        public void Hide() => gameObject.SetActive(false);
+        public void Hide() { acceptingInput=false; gameObject.SetActive(false); }
     }
 }

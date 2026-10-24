@@ -19,8 +19,8 @@ namespace JPHACKS2026
         public float walkChoiceTime = 30f;
         [Tooltip("配信中、視聴者の投票で決まるまでの時間（制限時間に対する割合）。投票が無ければ体験者の制限時間いっぱいまで待つ")]
         [Range(0.1f, 1f)] public float viewerTimeRatio = 0.5f;
-        [Tooltip("亀に乗って海中を進む時間（秒）")]
-        public float rideDuration = 20f;
+        [Tooltip("亀に乗って海中を進む時間（秒）。台詞が長い場合は再生終了まで待つ")]
+        [Min(0.1f)] public float rideDuration = 10f;
 
         GameManager gm => GameManager.Instance;
         NarrationPlayer narration => gm.narration;
@@ -63,7 +63,7 @@ namespace JPHACKS2026
         /// 台詞の途中で成立した場合は入力を保持し、台詞が終わってから次へ進む（03 機能仕様書）。
         /// 配信中は視聴者が投票でき、体験者が行動しないまま時間切れになったら投票1位で進む。
         /// </summary>
-        IEnumerator Choose(ChoiceDef def, Action<int> result)
+        public IEnumerator Choose(ChoiceDef def, Action<int> result)
         {
             var live = LiveStream.Instance;
             gm.Choice.Show(def);
@@ -77,6 +77,7 @@ namespace JPHACKS2026
             float remaining = def.timeLimit;
             while (remaining > 0 && chosen < 0)
             {
+                if (gm.Choice.SelectedIndex >= 0) chosen = gm.Choice.SelectedIndex;
                 for (int i = 0; i < def.options.Length && chosen < 0; i++)
                     foreach (var t in def.options[i].triggers)
                         if (t != null && t.Fired) { chosen = i; break; }
@@ -108,6 +109,11 @@ namespace JPHACKS2026
                 chosen = live.TopVote();
                 decidedBy = "viewers";
                 gm.Choice.ShowDecidedByViewers();
+            }
+            if (chosen < 0)
+            {
+                chosen = 0; // 各分岐の先頭が本線。無操作でも物語を続ける。
+                gm.Choice.ShowAutoContinue();
             }
             if (live != null) live.CloseChoice(chosen, decidedBy);
 
@@ -150,9 +156,13 @@ namespace JPHACKS2026
             switch (r)
             {
                 case 0:
-                    var turtle = A("beach.turtle");
-                    for (int i = 0; i < 3; i++) A<SimpleCharacter>("beach.child." + i).Flee(turtle.position, 12f, 3.5f);
-                    yield return Say(StoryScript.BeachHelp);
+                    FleeBeachChildren(3.5f);
+                    yield return Say(StoryScript.BeachHelp[0], StoryScript.BeachHelp[1], StoryScript.BeachHelp[2]);
+                    var rescuedTurtle = A<SimpleCharacter>("beach.turtle");
+                    rescuedTurtle.lookAtPlayer = false;
+                    rescuedTurtle.lookTarget = null;
+                    rescuedTurtle.StartMoveTo(A("beach.sea.point").position, 1.6f);
+                    yield return Say(StoryScript.BeachHelp[3]);
                     yield return Invite(true);
                     break;
                 case 1: yield return endings.Play(EndingId.ED1); break;
@@ -161,21 +171,29 @@ namespace JPHACKS2026
             }
         }
 
+        /// <summary>子ども全員が浜辺の陸側にある共通の退避場所へ走る。到着時の重なりだけ避ける。</summary>
+        public void FleeBeachChildren(float speed)
+        {
+            var beach = A("beach.turtle").parent;
+            for (int i = 0; i < 3; i++)
+            {
+                var destination = beach.TransformPoint(new Vector3(-12f + i * .6f, 0, -6f));
+                A<SimpleCharacter>("beach.child." + i).FleeTo(destination, speed);
+            }
+        }
+
         // ── ② 亀から竜宮城への誘い ──────────────────────
 
         IEnumerator Invite(bool continuing)
         {
             SetCheckpoint(Chapter.Invite);
-            if (!continuing)
-            {
-                yield return gm.GoToArea("beach", A("beach.invite.spawn"), afterSwitch: () =>
-                {
-                    for (int i = 0; i < 3; i++) A("beach.child." + i).gameObject.SetActive(false);
-                });
-            }
+            yield return StageInvitation(continuing);
             var turtle = A<SimpleCharacter>("beach.turtle");
-            turtle.lookAtPlayer = true;
+            var beach = gm.GetArea("beach").transform;
+            var arrival = gm.StartCoroutine(turtle.MoveTo(beach.TransformPoint(new Vector3(2.3f, 0, 7.5f)), .8f));
             yield return Intro(StoryScript.InviteIntro);
+            yield return arrival;
+            turtle.lookAtPlayer = true;
 
             int r = -1;
             yield return Choose(new ChoiceDef
@@ -184,7 +202,7 @@ namespace JPHACKS2026
                 timeLimit = choiceTime,
                 options = new[]
                 {
-                    new ChoiceDef.Option("行く", "亀の背中に\n手を置く", A<TouchTrigger>("beach.turtle.back")),
+                    new ChoiceDef.Option("行く", "このボタンを指して\nトリガーで決定") { button = true },
                     new ChoiceDef.Option("行かない", "首を横に振る", A<HeadShakeTrigger>("beach.headshake")),
                 },
             }, v => r = v);
@@ -199,6 +217,19 @@ namespace JPHACKS2026
                 case 1: yield return endings.Play(EndingId.ED3); break;
                 default: yield return gm.TimeUp(); break;
             }
+        }
+
+        /// <summary>救出当日と区別できる、数日後の朝の釣り場へ切り替える。</summary>
+        public IEnumerator StageInvitation(bool showTimeCard)
+        {
+            gm.rig.LocomotionEnabled = false;
+            yield return gm.Fader.FadeOut(.8f);
+            if (showTimeCard) yield return gm.Fader.ShowTimeCard("数日後", "朝の浜辺");
+            gm.SwitchArea("beach", A("beach.invite.spawn"));
+            for (int i = 0; i < 3; i++) A("beach.child." + i).gameObject.SetActive(false);
+            InvitationBeachScene.Prepare(gm);
+            yield return gm.Fader.FadeIn(1f);
+            gm.rig.LocomotionEnabled = true;
         }
 
         /// <summary>亀に乗って海中を自動移動。まっすぐ一定速度で進み、回転はさせない（VR酔い対策）。</summary>
@@ -281,7 +312,7 @@ namespace JPHACKS2026
                 timeLimit = choiceTime,
                 options = new[]
                 {
-                    new ChoiceDef.Option("帰る", "亀の背中に\n手を置く", A<TouchTrigger>("ryugu.turtle.back")),
+                    new ChoiceDef.Option("帰る", "このボタンを指して\nトリガーで決定") { button = true },
                     new ChoiceDef.Option("帰らない", "乙姫の手を取る", A<TouchTrigger>("ryugu.otohime.touch")),
                 },
             }, v => r = v);
@@ -315,7 +346,8 @@ namespace JPHACKS2026
                 options = new[]
                 {
                     new ChoiceDef.Option("開ける", "ふたを持ち上げる", A<LidOpenTrigger>("village.box.open")),
-                    new ChoiceDef.Option("開けない", "玉手箱を置いて\n村の道を歩き出す", A<ZoneTrigger>("village.path.end")),
+                    new ChoiceDef.Option("放置する", "このボタンで選ぶ\nまたは村の道を歩く", A<ZoneTrigger>("village.path.end")) { button = true },
+                    new ChoiceDef.Option("おじさんにあげる", "このボタンを指して\nトリガーで決定") { button = true },
                 },
             }, v => r = v);
 
@@ -323,6 +355,7 @@ namespace JPHACKS2026
             {
                 case 0: yield return endings.Play(EndingId.ED6); break;
                 case 1: yield return endings.Play(EndingId.ED7); break;
+                case 2: yield return endings.Play(EndingId.ED8); break;
                 default: yield return gm.TimeUp(); break;
             }
         }
