@@ -100,6 +100,9 @@ body {
   .card { padding: 14px; }
   /* iOS で入力欄を触ったときに画面が拡大されないよう16px以上にする */
   .comment-form input, .comment-form button { font-size: 16px; }
+  /* 映像のすぐ下にコメント欄を置き、見ながら書けるようにする */
+  .comments { order: -1; min-height: 0; }
+  .comment-list { max-height: 200px; }
   .option { padding: 12px; }
 }
 
@@ -127,6 +130,7 @@ body {
 }
 .screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .screen img:not([src]) { visibility: hidden; }
+.screen-empty[hidden] { display: none; }   /* display: grid が hidden 属性を打ち消さないように */
 .screen-empty {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -148,6 +152,32 @@ body {
   animation: fly linear forwards;
 }
 @keyframes fly { to { transform: translateX(calc(-100vw - 100%)); } }
+
+.screen-reactions { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.screen-reactions span {
+  position: absolute; bottom: 4%;
+  font-size: clamp(24px, 4vw, 40px);
+  animation: rise ease-out forwards;
+}
+@keyframes rise {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { transform: translateY(-10%) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-260%) scale(1); opacity: 0; }
+}
+
+.reactions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.reaction {
+  flex: 1 1 0; min-width: 64px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 6px; border-radius: 12px;
+  border: 2px solid rgba(247, 239, 220, 0.35); background: rgba(247, 239, 220, 0.08);
+  color: var(--on-bg); font: inherit; cursor: pointer;
+  transition: transform 0.08s, background 0.2s;
+}
+.reaction:hover { background: rgba(247, 239, 220, 0.18); }
+.reaction:active { transform: scale(0.92); }
+.reaction-emoji { font-size: 26px; line-height: 1; }
+.reaction-word { font-size: 12px; font-weight: 700; }
 
 .subtitle {
   min-height: 3.6em;
@@ -232,7 +262,7 @@ body {
 .comment-list li { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 .comment-list .name { color: var(--ink-soft); margin-right: 6px; font-size: 12px; }
 .comment-list .vote-tag { margin-left: 6px; font-size: 11px; color: var(--accent); font-weight: 700; }
-.comment-form { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 6px; margin-top: 10px; }
+.comment-form { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 6px; margin-bottom: 10px; }
 .comment-form input {
   min-width: 0; padding: 8px 10px; border-radius: 8px;
   border: 2px solid var(--line); background: transparent; color: inherit; font: inherit; font-size: 14px;

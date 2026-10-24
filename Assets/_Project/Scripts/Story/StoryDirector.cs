@@ -17,6 +17,8 @@ namespace JPHACKS2026
         public float choiceTime = 20f;
         [Tooltip("歩いて移動が必要な選択肢の制限時間（秒）")]
         public float walkChoiceTime = 30f;
+        [Tooltip("配信中、視聴者の投票で決まるまでの時間（制限時間に対する割合）。投票が無ければ体験者の制限時間いっぱいまで待つ")]
+        [Range(0.1f, 1f)] public float viewerTimeRatio = 0.5f;
         [Tooltip("亀に乗って海中を進む時間（秒）")]
         public float rideDuration = 20f;
 
@@ -65,7 +67,10 @@ namespace JPHACKS2026
         {
             var live = LiveStream.Instance;
             gm.Choice.Show(def);
-            if (live != null) live.OpenChoice(def);
+            // 視聴者の投票は短めに締め切る（投票があればそこで決まる）。無ければ体験者の制限時間いっぱいまで延ばす
+            float viewerTime = def.timeLimit * viewerTimeRatio;
+            bool viewerTimeOver = false;
+            if (live != null) live.OpenChoice(def, viewerTime);
             foreach (var o in def.options) foreach (var t in o.triggers) if (t != null) t.Arm();
 
             int chosen = -1;
@@ -83,7 +88,14 @@ namespace JPHACKS2026
                 gm.Choice.SetRemaining(remaining / def.timeLimit, remaining);
                 if (live != null)
                 {
-                    live.UpdateRemaining(remaining);
+                    float viewerRemaining = viewerTime - (def.timeLimit - remaining);
+                    if (!viewerTimeOver && viewerRemaining <= 0)
+                    {
+                        viewerTimeOver = true;
+                        if (live.TopVote() >= 0) break;
+                        live.ExtendChoice(remaining);
+                    }
+                    live.UpdateRemaining(viewerTimeOver ? remaining : viewerRemaining);
                     gm.Choice.SetVotes(live.Votes, live.TotalVotes);
                 }
                 yield return null;

@@ -9,6 +9,14 @@ namespace JPHACKS2026
     {
         const string EndingsKey = "urashima.endings";
         const string CheckpointKey = "urashima.checkpoint";
+        const string EyeOffsetKey = "urashima.eyeOffset";
+
+        /// <summary>目線の高さの補正（m）。エンディングの記録とは別の設定なので ResetAll では消さない。</summary>
+        public static float EyeHeightOffset
+        {
+            get => PlayerPrefs.GetFloat(EyeOffsetKey, 0f);
+            set { PlayerPrefs.SetFloat(EyeOffsetKey, value); PlayerPrefs.Save(); }
+        }
 
         public static bool HasEnding(EndingId id) => (PlayerPrefs.GetInt(EndingsKey, 0) & (1 << (int)id)) != 0;
 

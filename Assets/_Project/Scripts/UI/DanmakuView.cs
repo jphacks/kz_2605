@@ -10,11 +10,12 @@ namespace JPHACKS2026
     /// </summary>
     public class DanmakuView : MonoBehaviour
     {
-        const float Width = 1700, Height = 420;
-        const int Lanes = 5;
-        const int MaxComments = 24;
+        const float Width = 1700, Height = 500;
+        const int Lanes = 4;
+        const int MaxComments = 20;
+        const float FontSize = 76;   // VRで読める大きさ（1.8m先で約7.5cm）
 
-        public float speed = 260f;   // px/秒
+        public float speed = 230f;   // px/秒
 
         RectTransform root;
         TextMeshProUGUI badge;
@@ -30,8 +31,8 @@ namespace JPHACKS2026
             var view = canvas.gameObject.AddComponent<DanmakuView>();
             view.live = live;
             var follow = canvas.gameObject.AddComponent<WorldPanel>();
-            follow.distance = 2.2f;
-            follow.heightOffset = 0.55f;
+            follow.distance = 1.8f;
+            follow.heightOffset = 0.5f;
             follow.continuousFollow = true;
             follow.followSharpness = 3f;
 
@@ -40,26 +41,68 @@ namespace JPHACKS2026
             view.root = (RectTransform)clip.transform;
             view.root.sizeDelta = new Vector2(Width, Height);
 
-            var badgeBg = UIFactory.CreateImage(canvas.transform, "LiveBadge", new Color(0.85f, 0.12f, 0.1f, 0.9f), new Vector2(340, 56), new Vector2(-Width / 2 + 180, Height / 2 + 40));
-            view.badge = UIFactory.CreateText(badgeBg.transform, "Text", "", 34, Color.white, new Vector2(330, 56));
+            var badgeBg = UIFactory.CreateImage(canvas.transform, "LiveBadge", new Color(0.85f, 0.12f, 0.1f, 0.9f), new Vector2(420, 68), new Vector2(-Width / 2 + 220, Height / 2 + 46));
+            view.badge = UIFactory.CreateText(badgeBg.transform, "Text", "", 42, Color.white, new Vector2(410, 68));
             live.CommentReceived += view.Enqueue;
+            live.ReactionReceived += view.OnReaction;
             return view;
         }
 
         void OnDestroy()
         {
-            if (live != null) live.CommentReceived -= Enqueue;
+            if (live == null) return;
+            live.CommentReceived -= Enqueue;
+            live.ReactionReceived -= OnReaction;
+        }
+
+        // ── リアクション：帯の右下から、言葉がふわっと浮かんで消える ──
+
+        static readonly Dictionary<string, (string word, Color color)> Reactions = new()
+        {
+            { "clap", ("パチパチ", new Color(1f, 0.85f, 0.35f)) },
+            { "laugh", ("ワハハ", new Color(1f, 0.6f, 0.3f)) },
+            { "wow", ("えっ！", new Color(0.55f, 0.85f, 1f)) },
+            { "love", ("すてき", new Color(1f, 0.55f, 0.75f)) },
+            { "cheer", ("がんばれ", new Color(0.6f, 1f, 0.55f)) },
+        };
+        const int MaxReactions = 12;
+        const float ReactionLife = 2.2f;
+        readonly List<(TextMeshProUGUI text, Vector2 from, float born)> reactions = new();
+
+        void OnReaction(string type)
+        {
+            if (!Reactions.TryGetValue(type, out var r) || reactions.Count >= MaxReactions) return;
+            var t = UIFactory.CreateText(transform, "Reaction", r.word, 64, r.color, new Vector2(360, 90));
+            UIFactory.AddOutline(t, 0.3f, new Color(0, 0, 0, 0.9f));
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            var from = new Vector2(Width / 2 - 160 - Random.Range(0f, 220f), -Height / 2 - 20);
+            ((RectTransform)t.transform).anchoredPosition = from;
+            reactions.Add((t, from, Time.unscaledTime));
+        }
+
+        void UpdateReactions()
+        {
+            for (int i = reactions.Count - 1; i >= 0; i--)
+            {
+                var (text, from, born) = reactions[i];
+                float k = (Time.unscaledTime - born) / ReactionLife;
+                if (k >= 1) { Destroy(text.gameObject); reactions.RemoveAt(i); continue; }
+                ((RectTransform)text.transform).anchoredPosition = from + new Vector2(Mathf.Sin(k * 6f) * 18f, k * 260f);
+                text.transform.localScale = Vector3.one * (k < 0.15f ? Mathf.Lerp(0.6f, 1.1f, k / 0.15f) : 1f);
+                text.alpha = k < 0.7f ? 1f : 1 - (k - 0.7f) / 0.3f;
+            }
         }
 
         void Enqueue(string name, string text)
         {
-            if (pending.Count < 50) pending.Enqueue(text.Length > 40 ? text.Substring(0, 40) + "…" : text);
+            if (pending.Count < 50) pending.Enqueue(text.Length > 30 ? text.Substring(0, 30) + "…" : text);
         }
 
         void Update()
         {
             float dt = Time.unscaledDeltaTime;
             badge.text = $"● LIVE　視聴者 {live.ViewerCount}人";
+            UpdateReactions();
 
             // 空いているレーンに次のコメントを出す
             while (pending.Count > 0 && flying.Count < MaxComments)
@@ -91,12 +134,13 @@ namespace JPHACKS2026
 
         void Spawn(string text, int lane)
         {
-            var t = UIFactory.CreateText(root, "Comment", text, 46, Color.white, new Vector2(1200, 70), default, TextAlignmentOptions.Left);
-            UIFactory.AddOutline(t, 0.25f, new Color(0, 0, 0, 0.9f));
+            float lineHeight = FontSize * 1.4f;
+            var t = UIFactory.CreateText(root, "Comment", text, FontSize, Color.white, new Vector2(2400, lineHeight), default, TextAlignmentOptions.Left);
+            UIFactory.AddOutline(t, 0.3f, new Color(0, 0, 0, 0.95f));
             t.textWrappingMode = TextWrappingModes.NoWrap;
-            float w = Mathf.Min(1200, t.GetPreferredValues(text).x + 20);
+            float w = t.GetPreferredValues(text).x + 20;
             var rt = (RectTransform)t.transform;
-            rt.sizeDelta = new Vector2(w, 70);
+            rt.sizeDelta = new Vector2(w, lineHeight);
             rt.pivot = new Vector2(0, 0.5f);
             float laneHeight = Height / Lanes;
             rt.anchoredPosition = new Vector2(Width / 2, Height / 2 - laneHeight * (lane + 0.5f));

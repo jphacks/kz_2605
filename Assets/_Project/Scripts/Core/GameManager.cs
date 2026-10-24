@@ -94,6 +94,7 @@ namespace JPHACKS2026
                 AudioListener.pause = false;
                 IsPaused = false;
             }
+            adjustingEye = false;
             PauseMenu.Hide();
             Menu.Hide();
             Choice.Hide();
@@ -197,12 +198,18 @@ namespace JPHACKS2026
             if (SaveData.TryGetCheckpoint(out var saved)) items.Add(("続きから", () => start = () => BeginStory(saved)));
             foreach (var (chapter, label) in ChapterMenu)
                 items.Add((label, () => start = () => JumpToChapter(chapter)));
-            Menu.Show("おとぎ配信", "絵本の世界へ入ります\n<size=80%>チャプターを選ぶと、その選択肢から始まります</size>", items.ToArray());
-            Menu.PlaceAt(StoryAnchor.Get("title.menu"));
+            var menuAnchor = StoryAnchor.Get("title.menu");
+            void ShowTitleMenu()
+            {
+                Menu.Show("おとぎ配信", "絵本の世界へ入ります\n<size=80%>チャプターを選ぶと、その選択肢から始まります</size>", items.ToArray());
+                Menu.PlaceAt(menuAnchor);
+            }
+            items.Add(("目線調節", () => { ShowEyeMenu(Menu, ShowTitleMenu); Menu.PlaceAt(menuAnchor); }));
+            ShowTitleMenu();
             while (start == null)
             {
                 int k = GameInput.DebugNumberKeyDown();
-                if (k >= 0 && k < items.Count) items[k].Item2();
+                if (k >= 0 && k < items.Count && !adjustingEye) items[k].Item2();
                 yield return null;
             }
             Menu.Hide();
@@ -254,16 +261,20 @@ namespace JPHACKS2026
                 LiveStream.Instance.PublishPhase("ending");
             }
             narration.Stop();
-            if (Fader.Alpha < 0.99f) yield return Fader.FadeOut(1.0f);
+            // 物語の世界が光にほどけ、絵本の中から部屋へ戻される（入るときの逆）：
+            // 光に包まれる → 開いた絵本が強く光った状態で部屋が現れる → 光がページへ吸い込まれていく
+            yield return Fader.FadeTo(new Color(1f, 0.97f, 0.9f), 1, 1.8f);
             rig.RideAnchor = null;
             rig.SetAgedHands(false);
             SwitchArea("title");
             ShowHud(false);
             var book = StoryAnchor.Get<Picturebook>("title.book");
             book.SetOpenImmediate(true);
-            yield return Tween.Wait(0.3f);
-            StartCoroutine(book.GlowTo(0.2f, 1.0f));   // 物語を終えたページがほのかに光る
-            yield return Fader.FadeIn(1.0f);
+            book.SetGlow(1f);
+            yield return Tween.Wait(0.6f);
+            StartCoroutine(book.GlowTo(0.2f, 3.0f));   // 光が引いて、物語を終えたページがほのかに光る
+            yield return Fader.FadeIn(2.2f);
+            yield return Tween.Wait(0.8f);
             yield return Medetashi();
             StartCoroutine(book.GlowTo(0f, 1.2f));
             yield return book.Close();
@@ -289,11 +300,12 @@ namespace JPHACKS2026
         /// <summary>開いた絵本の上に「めでたし めでたし」を浮かべ、読み上げてから消す。</summary>
         IEnumerator Medetashi()
         {
-            var canvas = UIFactory.CreateCanvas("Medetashi", new Vector2(1000, 260), StoryAnchor.Get("title.menu"));
+            var canvas = UIFactory.CreateCanvas("Medetashi", new Vector2(1300, 260), StoryAnchor.Get("title.menu"));
             canvas.transform.localPosition = new Vector3(0, -0.05f, -0.2f);
             canvas.transform.localRotation = Quaternion.identity;
             canvas.transform.localScale = Vector3.one * 0.0012f;
-            var text = UIFactory.CreateText(canvas.transform, "Text", "めでたし　めでたし", 120, UIFactory.PaperColor, new Vector2(1000, 220));
+            var text = UIFactory.CreateText(canvas.transform, "Text", "めでたし　めでたし", 120, UIFactory.PaperColor, new Vector2(1300, 220));
+            text.textWrappingMode = TextWrappingModes.NoWrap;   // 「めでたし めでた／し」のように途中で折り返さない
             UIFactory.AddOutline(text, 0.25f);
             text.alpha = 0;
             yield return Tween.Run(1.0f, t => text.alpha = t);
@@ -325,12 +337,47 @@ namespace JPHACKS2026
             IsPaused = true;
             Time.timeScale = 0;
             AudioListener.pause = true;
-            PauseMenu.Show("ポーズ", "", ("再開", Resume), ("最初からやり直す", RestartStory), ("タイトルに戻る", GoToTitle));
+            ShowPauseMenu();
+        }
+
+        void ShowPauseMenu()
+        {
+            PauseMenu.Show("ポーズ", "", ("再開", Resume), ("目線調節", () => ShowEyeMenu(PauseMenu, ShowPauseMenu)),
+                ("最初からやり直す", RestartStory), ("タイトルに戻る", GoToTitle));
+        }
+
+        // ── 目線調節 ─────────────────────────────────
+
+        bool adjustingEye;
+
+        /// <summary>メニューを目線調節の画面に切り替える。「戻る」で back を呼ぶ。ボタンはレイで指してトリガーで押す。</summary>
+        void ShowEyeMenu(MenuPanel panel, System.Action back)
+        {
+            adjustingEye = true;
+            void Apply(System.Action change)
+            {
+                change();
+                panel.SetBody(EyeMenuBody());
+                panel.Resnap();
+            }
+            panel.Show("目線調節", EyeMenuBody(),
+                ("目線を上げる", () => Apply(rig.RaiseEye)),
+                ("目線を下げる", () => Apply(rig.LowerEye)),
+                ("いまの高さに合わせる", () => Apply(rig.CalibrateEye)),
+                ("元に戻す", () => Apply(rig.ResetEye)),
+                ("戻る", () => { adjustingEye = false; back(); }));
+        }
+
+        string EyeMenuBody()
+        {
+            int cm = Mathf.RoundToInt(rig.EyeHeightOffset * 100);
+            return $"いまの補正：{(cm > 0 ? "+" : "")}{cm} cm\n<size=80%>座って遊ぶときは「いまの高さに合わせる」</size>";
         }
 
         public void Resume()
         {
             IsPaused = false;
+            adjustingEye = false;
             Time.timeScale = 1;
             AudioListener.pause = false;
             PauseMenu.Hide();

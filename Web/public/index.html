@@ -40,11 +40,15 @@
             <img id="frame" alt="体験者が見ている絵本の世界">
             <div id="screen-empty" class="screen-empty">絵本がひらくのを待っています…</div>
             <div id="screen-danmaku" class="screen-danmaku" aria-hidden="true"></div>
+            <div id="screen-reactions" class="screen-reactions" aria-hidden="true"></div>
             <div id="area-name" class="area-name"></div>
           </div>
           <p id="subtitle" class="subtitle"><span class="subtitle-idle">― 物語はまだ始まっていません ―</span></p>
         </div>
       </div>
+
+      <!-- リアクション：押すと体験者のVR視界にも浮かぶ（種類は app.js の REACTIONS） -->
+      <div id="reactions" class="reactions" role="group" aria-label="リアクション"></div>
 
       <div id="thanks" class="thanks" hidden>
         <p class="thanks-main">ご視聴ありがとうございました。</p>
@@ -67,17 +71,18 @@
         <h2 id="choice-question" class="choice-question"></h2>
         <div id="choice-timebar" class="timebar"><div></div></div>
         <div id="choice-options" class="options"></div>
-        <p id="choice-note" class="choice-note">体験者が行動しないまま時間切れになると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。</p>
+        <p id="choice-note" class="choice-note">体験者より先に締め切りが来ると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。</p>
       </section>
 
       <section class="card comments">
         <h2 class="card-title">コメント</h2>
-        <ul id="comment-list" class="comment-list"></ul>
+        <!-- 映像を見ながら書けるよう、入力欄は一覧の上に置く（新しいコメントは入力欄のすぐ下に出る） -->
         <form id="comment-form" class="comment-form" autocomplete="off">
           <input id="comment-name" class="name-input" maxlength="20" placeholder="なまえ">
           <input id="comment-text" class="text-input" maxlength="60" placeholder="コメントする（選択肢の名前で1票）" required>
           <button type="submit">送る</button>
         </form>
+        <ul id="comment-list" class="comment-list"></ul>
       </section>
     </aside>
   </main>

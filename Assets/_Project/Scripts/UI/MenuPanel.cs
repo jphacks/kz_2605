@@ -76,6 +76,16 @@ namespace JPHACKS2026
             GetComponent<WorldPanel>().SnapToView();
         }
 
+        /// <summary>ボタンを作り直さずに本文だけ書き換える（目線調節の現在値など）。</summary>
+        public void SetBody(string bodyText) => body.text = bodyText;
+
+        /// <summary>追従中なら、いまの頭の位置に合わせて正面に置き直す（目線の高さを変えたときなど）。</summary>
+        public void Resnap()
+        {
+            var follow = GetComponent<WorldPanel>();
+            if (follow.enabled) follow.SnapToView();
+        }
+
         /// <summary>パネルを追従させず、指定位置に固定して表示する（タイトルの絵本の上など）。</summary>
         public void PlaceAt(Transform anchor)
         {

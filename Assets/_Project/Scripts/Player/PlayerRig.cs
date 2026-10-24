@@ -19,6 +19,12 @@ namespace JPHACKS2026
         public float moveSpeed = 1.6f;
         public float snapTurnDegrees = 30f;
 
+        [Header("Eye Height")]
+        public float standardEyeHeight = 1.6f;
+        public float eyeAdjustStep = 0.1f;
+        public float minEyeOffset = -0.6f;
+        public float maxEyeOffset = 0.8f;
+
         public Transform Head => head;
         public bool LocomotionEnabled { get; set; } = true;
 
@@ -30,7 +36,29 @@ namespace JPHACKS2026
         void Start()
         {
             SetFloorOrigin();
+            EyeHeightOffset = SaveData.EyeHeightOffset;
         }
+
+        /// <summary>目線の高さの補正（m）。CameraOffsetを上下させ、保存もする。</summary>
+        public float EyeHeightOffset
+        {
+            get => cameraOffset.localPosition.y;
+            set
+            {
+                float v = Mathf.Round(Mathf.Clamp(value, minEyeOffset, maxEyeOffset) * 100f) / 100f;
+                var p = cameraOffset.localPosition;
+                cameraOffset.localPosition = new Vector3(p.x, v, p.z);
+                SaveData.EyeHeightOffset = v;
+                foreach (var h in Hands) h.ResetVelocity();
+            }
+        }
+
+        public void RaiseEye() => EyeHeightOffset += eyeAdjustStep;
+        public void LowerEye() => EyeHeightOffset -= eyeAdjustStep;
+        public void ResetEye() => EyeHeightOffset = 0;
+
+        /// <summary>座って遊ぶときなど：いまの頭の高さが標準の目線になるように合わせる。</summary>
+        public void CalibrateEye() => EyeHeightOffset = standardEyeHeight - head.localPosition.y;
 
         static void SetFloorOrigin()
         {

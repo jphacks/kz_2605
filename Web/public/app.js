@@ -217,7 +217,7 @@ function renderChoice() {
   const note = $("choice-note");
   if (open) {
     note.className = "choice-note";
-    note.textContent = "体験者が行動しないまま時間切れになると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。";
+    note.textContent = "体験者より先に締め切りが来ると、投票1位で物語が進みます。コメントに選択肢の名前を書いても1票になります。";
   } else {
     const label = options[choice.result]?.label;
     note.className = "choice-note result";
@@ -283,10 +283,11 @@ function addComment(c, live) {
   name.className = "name";
   name.textContent = c.name || "名無しの村人";
   li.append(name, c.text);
+  // 新しいものを上（入力欄のすぐ下）に積む
   const list = $("comment-list");
-  list.append(li);
-  while (list.children.length > 100) list.firstElementChild.remove();
-  list.scrollTop = list.scrollHeight;
+  list.prepend(li);
+  while (list.children.length > 100) list.lastElementChild.remove();
+  list.scrollTop = 0;
   if (live) flyOnScreen(c.text);
 }
 
@@ -296,6 +297,50 @@ function flyOnScreen(text) {
   span.textContent = text;
   span.style.top = `${Math.floor(Math.random() * 6) * 15 + 4}%`;
   span.style.animationDuration = `${7 + Math.random() * 2}s`;
+  span.addEventListener("animationend", () => span.remove());
+  layer.append(span);
+}
+
+// ── リアクション ─────────────────────────────
+// key は Unity（LiveStream / DanmakuView）と database.rules.json の種類と合わせる。VRでは絵文字が出せないので word を浮かべる
+const REACTIONS = [
+  { key: "clap", emoji: "👏", word: "パチパチ" },
+  { key: "laugh", emoji: "😆", word: "ワハハ" },
+  { key: "wow", emoji: "😲", word: "えっ！" },
+  { key: "love", emoji: "💖", word: "すてき" },
+  { key: "cheer", emoji: "📣", word: "がんばれ" },
+];
+const REACTION_COOLDOWN_MS = 400;
+let lastReactionAt = 0;
+
+$("reactions").replaceChildren(...REACTIONS.map((r) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "reaction";
+  btn.innerHTML = `<span class="reaction-emoji" aria-hidden="true">${r.emoji}</span><span class="reaction-word">${r.word}</span>`;
+  btn.addEventListener("click", () => {
+    if (Date.now() - lastReactionAt < REACTION_COOLDOWN_MS) return;
+    lastReactionAt = Date.now();
+    push(roomRef("audience/reactions"), { type: r.key, vid: viewerId, t: serverTimestamp() });
+  });
+  return btn;
+}));
+
+// ページを開いたあとのリアクション（自分のものも含む）を画面に浮かべる
+onChildAdded(query(roomRef("audience/reactions"), limitToLast(10)), (snap) => {
+  const r = snap.val();
+  if (!r || typeof r.t !== "number" || r.t < openedAt - 2000) return;
+  const def = REACTIONS.find((d) => d.key === r.type);
+  if (def) floatReaction(def.emoji);
+});
+
+function floatReaction(emoji) {
+  const layer = $("screen-reactions");
+  if (layer.childElementCount > 30) return;
+  const span = document.createElement("span");
+  span.textContent = emoji;
+  span.style.right = `${4 + Math.random() * 14}%`;
+  span.style.animationDuration = `${2.2 + Math.random() * 0.8}s`;
   span.addEventListener("animationend", () => span.remove());
   layer.append(span);
 }

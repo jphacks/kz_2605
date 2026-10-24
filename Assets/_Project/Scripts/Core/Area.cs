@@ -31,6 +31,7 @@ namespace JPHACKS2026
         public void Init()
         {
             if (initialized) return;
+            SceneryDetails.Build(this);
             initialized = true;
             foreach (var r in GetComponentsInChildren<Resettable>(true)) r.Capture();
             // ホラー演出でエリア全体の色を変えるので、全Rendererのマテリアルを覚えておく

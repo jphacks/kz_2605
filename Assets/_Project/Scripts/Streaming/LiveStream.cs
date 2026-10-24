@@ -26,6 +26,8 @@ namespace JPHACKS2026
         public int[] Votes { get; private set; } = Array.Empty<int>();
         public int TotalVotes { get; private set; }
         public event Action<string, string> CommentReceived;   // (名前, 本文)
+        /// <summary>視聴者のリアクション（"clap" / "laugh" / "wow" / "love" / "cheer"。Webの REACTIONS と合わせる）。</summary>
+        public event Action<string> ReactionReceived;
 
         FirebaseRest rest;
         SpectatorCamera spectator;
@@ -42,6 +44,7 @@ namespace JPHACKS2026
         // 視聴者側のデータ（audience）の手元の写し
         readonly Dictionary<string, object> audience = new();
         readonly HashSet<string> seenComments = new();
+        readonly HashSet<string> seenReactions = new();
 
         static readonly Dictionary<string, string> AreaNames = new()
         {
@@ -173,21 +176,31 @@ namespace JPHACKS2026
             Queue("state/t", Now);
         }
 
-        public void OpenChoice(ChoiceDef def)
+        /// <summary>選択肢を視聴者に出す。timeLimit は視聴者の投票の締め切りまでの秒数。</summary>
+        public void OpenChoice(ChoiceDef def, float timeLimit)
         {
             choiceId = Now.ToString();
             Votes = new int[def.options.Length];
             TotalVotes = 0;
-            lastRemainingSent = def.timeLimit;
+            lastRemainingSent = timeLimit;
             var options = new List<object>();
             foreach (var o in def.options)
                 options.Add(new Dictionary<string, object> { { "label", o.label }, { "hint", o.hint.Replace("\n", "") } });
             Queue("choice", new Dictionary<string, object>
             {
                 { "id", choiceId }, { "question", def.question }, { "options", options },
-                { "timeLimit", def.timeLimit }, { "remaining", def.timeLimit }, { "status", "open" }, { "t", Now },
+                { "timeLimit", timeLimit }, { "remaining", timeLimit }, { "status", "open" }, { "t", Now },
             });
             CountVotes();
+        }
+
+        /// <summary>締め切りまでに投票が無かったとき：体験者の残り時間いっぱいまで投票を延ばす。</summary>
+        public void ExtendChoice(float remaining)
+        {
+            if (choiceId == null) return;
+            lastRemainingSent = remaining;
+            Queue("choice/timeLimit", remaining);
+            Queue("choice/remaining", remaining);
         }
 
         /// <summary>残り時間をWebに伝える（1秒ごとに間引く）。</summary>
@@ -273,6 +286,7 @@ namespace JPHACKS2026
             ViewerCount = audience.TryGetValue("viewers", out var v) && v is Dictionary<string, object> vs ? vs.Count : 0;
             CountVotes();
             ReceiveComments(initial);
+            ReceiveReactions(initial);
         }
 
         void Apply(string path, object value)
@@ -305,6 +319,22 @@ namespace JPHACKS2026
             }
             Votes = counts;
             TotalVotes = total;
+        }
+
+        /// <summary>まだ出していないリアクションを出す。出したものは手元の写しから消す（たまり続けないように）。</summary>
+        void ReceiveReactions(bool initial)
+        {
+            if (!audience.TryGetValue("reactions", out var all) || all is not Dictionary<string, object> d) return;
+            var keys = new List<string>(d.Keys);
+            keys.Sort(string.CompareOrdinal);
+            foreach (var key in keys)
+            {
+                var value = d[key];
+                d.Remove(key);
+                if (!seenReactions.Add(key) || initial) continue;
+                if (value is Dictionary<string, object> r && r.TryGetValue("type", out var type) && type is string s)
+                    ReactionReceived?.Invoke(s);
+            }
         }
 
         /// <summary>まだ流していないコメントを流す。つないだ直後に届く過去のコメントは流さない。</summary>

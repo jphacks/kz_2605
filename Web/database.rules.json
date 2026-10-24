@@ -22,6 +22,12 @@
               ".validate": "newData.hasChildren(['text', 't']) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 60 && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 20))"
             }
           },
+          "reactions": {
+            "$reaction": {
+              ".write": "!data.exists()",
+              ".validate": "newData.hasChildren(['type', 't']) && newData.child('type').isString() && newData.child('type').val().matches(/^(clap|laugh|wow|love|cheer)$/)"
+            }
+          },
           "viewers": {
             "$viewer": { ".write": true }
           }

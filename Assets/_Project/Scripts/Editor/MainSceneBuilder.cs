@@ -44,6 +44,7 @@ namespace JPHACKS2026.Editor
             mats.Clear();
             Directory.CreateDirectory(MatDir);
             TamatebakoMaterialImporter.Setup();   // 玉手箱のモデルにマテリアル（.mat）を割り当ててから組み立てる
+            TurtleModelImporter.Setup();          // 亀のモデルのアニメーション設定
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             var sun = new GameObject("Sun").AddComponent<Light>();
@@ -316,20 +317,16 @@ namespace JPHACKS2026.Editor
 
         // ── キャラクター（仮モデル） ────────────────────
 
-        static GameObject BuildTurtle(string name, Transform parent, Vector3 pos, float yaw, float size, string idPrefix)
+        /// <summary>
+        /// 亀。原点＝足元の中心、頭が +Z、長さ約 1.1×size。SeaTurtle.fbx があれば使い、なければ仮モデルで組む。
+        /// swimming：泳ぐアニメーション（乗って海中を進む亀など）。false なら漂うようなゆったりした動き。
+        /// </summary>
+        static GameObject BuildTurtle(string name, Transform parent, Vector3 pos, float yaw, float size, string idPrefix, bool swimming = false)
         {
             var root = Group(name, parent, pos, yaw);
             var body = Group("Body", root.transform, Vector3.zero);
-            var shellMat = Mat("TurtleShell", new Color(0.35f, 0.5f, 0.25f));
-            var skinMat = Mat("TurtleSkin", new Color(0.6f, 0.75f, 0.45f));
-            var eye = Mat("Black", new Color(0.05f, 0.05f, 0.05f));
             var t = body.transform;
-            Prim(PrimitiveType.Sphere, "Shell", t, new Vector3(0, 0.2f, 0) * size, new Vector3(0.75f, 0.32f, 0.9f) * size, shellMat, collider: false);
-            Prim(PrimitiveType.Sphere, "Head", t, new Vector3(0, 0.2f, 0.52f) * size, Vector3.one * 0.2f * size, skinMat, collider: false);
-            Prim(PrimitiveType.Sphere, "EyeL", t, new Vector3(-0.06f, 0.25f, 0.6f) * size, Vector3.one * 0.04f * size, eye, collider: false);
-            Prim(PrimitiveType.Sphere, "EyeR", t, new Vector3(0.06f, 0.25f, 0.6f) * size, Vector3.one * 0.04f * size, eye, collider: false);
-            foreach (var (x, z) in new[] { (-0.35f, 0.3f), (0.35f, 0.3f), (-0.32f, -0.3f), (0.32f, -0.3f) })
-                Prim(PrimitiveType.Sphere, "Flipper", t, new Vector3(x, 0.1f, z) * size, new Vector3(0.25f, 0.06f, 0.15f) * size, skinMat, collider: false);
+            if (!BuildTurtleModel(t, size, swimming)) BuildTurtlePlaceholder(t, size);
 
             var ch = root.AddComponent<SimpleCharacter>();
             ch.body = t;
@@ -352,6 +349,54 @@ namespace JPHACKS2026.Editor
                 Anchor(back, idPrefix + ".back");
             }
             return root;
+        }
+
+        static void BuildTurtlePlaceholder(Transform t, float size)
+        {
+            var shellMat = Mat("TurtleShell", new Color(0.35f, 0.5f, 0.25f));
+            var skinMat = Mat("TurtleSkin", new Color(0.6f, 0.75f, 0.45f));
+            var eye = Mat("Black", new Color(0.05f, 0.05f, 0.05f));
+            Prim(PrimitiveType.Sphere, "Shell", t, new Vector3(0, 0.2f, 0) * size, new Vector3(0.75f, 0.32f, 0.9f) * size, shellMat, collider: false);
+            Prim(PrimitiveType.Sphere, "Head", t, new Vector3(0, 0.2f, 0.52f) * size, Vector3.one * 0.2f * size, skinMat, collider: false);
+            Prim(PrimitiveType.Sphere, "EyeL", t, new Vector3(-0.06f, 0.25f, 0.6f) * size, Vector3.one * 0.04f * size, eye, collider: false);
+            Prim(PrimitiveType.Sphere, "EyeR", t, new Vector3(0.06f, 0.25f, 0.6f) * size, Vector3.one * 0.04f * size, eye, collider: false);
+            foreach (var (x, z) in new[] { (-0.35f, 0.3f), (0.35f, 0.3f), (-0.32f, -0.3f), (0.32f, -0.3f) })
+                Prim(PrimitiveType.Sphere, "Flipper", t, new Vector3(x, 0.1f, z) * size, new Vector3(0.25f, 0.06f, 0.15f) * size, skinMat, collider: false);
+        }
+
+        /// <summary>SeaTurtle.fbx を、頭が +Z・長さ 1.1×size・底面の中心が原点になるように置く。モデルが無ければ false。</summary>
+        static bool BuildTurtleModel(Transform body, float size, bool swimming)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(TurtleModelImporter.ModelPath);
+            if (model == null) return false;
+            var inst = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            PrefabUtility.UnpackPrefabInstance(inst, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            inst.name = "SeaTurtle";
+            foreach (var c in inst.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+
+            // 頭のボーンが +Z 側に来るように回す（FBXの軸の向きに左右されないように）
+            Transform head = null;
+            foreach (var tr in inst.GetComponentsInChildren<Transform>()) if (tr.name == "Head") { head = tr; break; }
+            var all = RendererBounds(inst.transform);
+            if (head != null)
+            {
+                var d = head.position - all.center; d.y = 0;
+                if (d.sqrMagnitude > 1e-6f) inst.transform.rotation = Quaternion.FromToRotation(d.normalized, Vector3.forward) * inst.transform.rotation;
+            }
+
+            all = RendererBounds(inst.transform);
+            inst.transform.localScale *= 1.1f * size / Mathf.Max(0.001f, all.size.z);
+            all = RendererBounds(inst.transform);
+            inst.transform.position -= new Vector3(all.center.x, all.min.y, all.center.z);
+            inst.transform.SetParent(body, false);
+
+            var animator = inst.GetComponent<Animator>();
+            if (animator == null) animator = inst.AddComponent<Animator>();
+            animator.runtimeAnimatorController = TurtleModelImporter.LoadController(swimming);
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.CullCompletely;
+            foreach (var r in inst.GetComponentsInChildren<SkinnedMeshRenderer>()) r.updateWhenOffscreen = false;
+            return true;
         }
 
         static GameObject BuildHuman(string name, Transform parent, Vector3 pos, float yaw, Color clothes, float height, Color hair)
@@ -489,7 +534,17 @@ namespace JPHACKS2026.Editor
             Prim(PrimitiveType.Cube, "Pages", book.transform, new Vector3(0, 0.03f, 0), new Vector3(0.34f, 0.03f, 0.24f), Mat("Paper", new Color(0.98f, 0.95f, 0.88f)), collider: false);
             var hinge = Group("CoverHinge", book.transform, new Vector3(-0.18f, 0.05f, 0));
             Prim(PrimitiveType.Cube, "Cover", hinge.transform, new Vector3(0.18f, 0, 0), new Vector3(0.36f, 0.015f, 0.26f), red, collider: false);
-            Prim(PrimitiveType.Cube, "CoverDeco", hinge.transform, new Vector3(0.18f, 0.009f, 0), new Vector3(0.2f, 0.003f, 0.12f), Mat("Gold", new Color(0.95f, 0.75f, 0.25f), 0.3f), collider: false);
+            Prim(PrimitiveType.Cube, "CoverDeco", hinge.transform, new Vector3(0.18f, 0.009f, 0), new Vector3(0.2f, 0.003f, 0.12f), gold, collider: false);
+            // 表紙の四隅の金具
+            foreach (var (cx, cz) in new[] { (0.345f, 0.115f), (0.345f, -0.115f), (0.03f, 0.115f), (0.03f, -0.115f) })
+                Prim(PrimitiveType.Cube, "CornerGuard", hinge.transform, new Vector3(cx, 0.0085f, cz), new Vector3(0.03f, 0.003f, 0.03f), gold, new Vector3(0, 45, 0), collider: false);
+            // 背表紙：丸みのある背に、金の背バンドと題名の札
+            var spineLeather = Mat("BookSpine", new Color(0.5f, 0.1f, 0.08f));
+            Prim(PrimitiveType.Cylinder, "Spine", book.transform, new Vector3(-0.18f, 0.029f, 0), new Vector3(0.03f, 0.13f, 0.06f), spineLeather, new Vector3(90, 0, 0), collider: false);
+            foreach (float bz in new[] { 0.112f, 0.096f, -0.096f, -0.112f, 0.03f, -0.03f })
+                Prim(PrimitiveType.Cylinder, "SpineBand", book.transform, new Vector3(-0.18f, 0.029f, bz), new Vector3(0.034f, 0.004f, 0.064f), gold, new Vector3(90, 0, 0), collider: false);
+            Prim(PrimitiveType.Cube, "SpineTitle", book.transform, new Vector3(-0.1955f, 0.029f, 0.063f), new Vector3(0.002f, 0.03f, 0.045f), gold, collider: false);
+            Prim(PrimitiveType.Cube, "SpineCrest", book.transform, new Vector3(-0.1955f, 0.029f, -0.063f), new Vector3(0.002f, 0.022f, 0.022f), gold, new Vector3(45, 0, 0), collider: false);
             pb.coverHinge = hinge.transform;
             pb.openAngle = 175f;
             // 吸い込まれる光：ページが灯る → 光の筋と粒 → 半透明の光がプレイヤーを包む（Picturebook.SetGlow）
@@ -628,6 +683,14 @@ namespace JPHACKS2026.Editor
             {
                 Mat("Spine0", new Color(0.6f, 0.15f, 0.12f)), Mat("Spine1", new Color(0.15f, 0.3f, 0.55f)), Mat("Spine2", new Color(0.2f, 0.45f, 0.25f)),
                 Mat("Spine3", new Color(0.85f, 0.65f, 0.3f)), Mat("Spine4", new Color(0.45f, 0.25f, 0.5f)), Mat("Spine5", new Color(0.9f, 0.85f, 0.75f)),
+                Mat("Spine6", new Color(0.3f, 0.18f, 0.1f)), Mat("Spine7", new Color(0.1f, 0.35f, 0.38f)),
+            };
+            var spineDeco = new SpineDeco
+            {
+                gold = Mat("SpineGold", new Color(0.85f, 0.66f, 0.28f), 0.15f),
+                label = Mat("SpineLabel", new Color(0.95f, 0.9f, 0.78f)),
+                ink = Mat("SpineInk", new Color(0.18f, 0.12f, 0.08f)),
+                pageEdge = Mat("Paper", new Color(0.98f, 0.95f, 0.88f)),
             };
             foreach (float side in new[] { -1f, 1f })
             foreach (float z in new[] { -0.9f, 1.7f })
@@ -643,13 +706,32 @@ namespace JPHACKS2026.Editor
                     Prim(PrimitiveType.Cube, "Board", st, new Vector3(0, y, 0), new Vector3(1.18f, 0.03f, 0.32f), darkWood, collider: false);
                     if (k == 4) break;
                     float x = -0.54f;
+                    float floor = y + 0.015f;
                     while (x < 0.5f)
                     {
-                        if (rnd.NextDouble() < 0.08) { x += 0.08f; continue; }   // ところどころ隙間
-                        float w = 0.035f + (float)rnd.NextDouble() * 0.04f;
-                        float h = 0.28f + (float)rnd.NextDouble() * 0.16f;
-                        Prim(PrimitiveType.Cube, "Book", st, new Vector3(x + w / 2, y + 0.015f + h / 2, 0.01f), new Vector3(w, h, 0.22f), spines[rnd.Next(spines.Length)], collider: false);
-                        x += w + 0.004f;
+                        double roll = rnd.NextDouble();
+                        if (roll < 0.06) { x += 0.08f; continue; }   // ところどころ隙間
+                        if (roll < 0.11 && x < 0.32f)
+                        {
+                            // 平積み：横に寝かせた本を数冊重ねる
+                            float sw = 0.16f + (float)rnd.NextDouble() * 0.06f, sy = floor;
+                            int n = 2 + rnd.Next(3);
+                            for (int b = 0; b < n; b++)
+                            {
+                                float th = 0.025f + (float)rnd.NextDouble() * 0.02f;
+                                var flat = Group("BookFlat", st, new Vector3(x + sw / 2 + ((float)rnd.NextDouble() - 0.5f) * 0.015f, sy + th / 2, 0.01f), ((float)rnd.NextDouble() - 0.5f) * 8f);
+                                flat.transform.localRotation *= Quaternion.Euler(0, 0, 90);
+                                BuildShelfBook(flat.transform, th, sw * 0.95f, spines[rnd.Next(spines.Length)], spineDeco, rnd);
+                                sy += th;
+                            }
+                            x += sw + 0.01f;
+                            continue;
+                        }
+                        float w = 0.03f + (float)rnd.NextDouble() * 0.045f;
+                        float h = 0.26f + (float)rnd.NextDouble() * 0.18f;
+                        var book = Group("Book", st, new Vector3(x + w / 2, floor + h / 2, 0.01f));
+                        BuildShelfBook(book.transform, w, h, spines[rnd.Next(spines.Length)], spineDeco, rnd);
+                        x += w + 0.003f;
                     }
                 }
             }
@@ -657,6 +739,57 @@ namespace JPHACKS2026.Editor
             // 行灯（部屋の四隅）
             foreach (var pos in new[] { new Vector3(-2.1f, 0, 2.7f), new Vector3(2.1f, 0, 2.7f), new Vector3(-2.1f, 0, -1.7f), new Vector3(2.1f, 0, -1.7f) })
                 BuildAndon(t, pos, darkWood, lit: pos.z > 0);
+        }
+
+        struct SpineDeco { public Material gold, label, ink, pageEdge; }
+
+        /// <summary>
+        /// 本棚の本1冊（中心が原点、背表紙が +Z）。背表紙に金の帯・題箋（題名を書いた紙）・飾り罫を
+        /// 本ごとにランダムに組み合わせ、古い和綴じ本や洋書の背表紙が並んでいるように見せる。
+        /// </summary>
+        static void BuildShelfBook(Transform t, float w, float h, Material cover, SpineDeco deco, System.Random rnd)
+        {
+            const float Depth = 0.22f;
+            float front = Depth / 2;
+            Prim(PrimitiveType.Cube, "Cover", t, Vector3.zero, new Vector3(w, h, Depth), cover, collider: false);
+            // 天（上の小口）にページの紙色を少し見せる
+            Prim(PrimitiveType.Cube, "Pages", t, new Vector3(0, h / 2, -0.004f), new Vector3(w * 0.82f, 0.004f, Depth - 0.012f), deco.pageEdge, collider: false);
+
+            int style = rnd.Next(4);
+            float bandH = Mathf.Min(0.012f, h * 0.04f);
+            if (style != 3)
+            {
+                // 上下の金帯（洋書の背バンド風）。太い本は2本ずつ
+                int bands = w > 0.05f ? 2 : 1;
+                for (int i = 0; i < bands; i++)
+                {
+                    float off = h * 0.42f - i * bandH * 2.2f;
+                    Prim(PrimitiveType.Cube, "Band", t, new Vector3(0, off, front + 0.002f), new Vector3(w * 1.01f, bandH, 0.004f), deco.gold, collider: false);
+                    Prim(PrimitiveType.Cube, "Band", t, new Vector3(0, -off, front + 0.002f), new Vector3(w * 1.01f, bandH, 0.004f), deco.gold, collider: false);
+                }
+            }
+            if (style == 0 || style == 3)
+            {
+                // 題箋：縦長の紙ラベルに、題名のかわりの墨の線
+                float lh = h * (0.35f + (float)rnd.NextDouble() * 0.15f);
+                float ly = h * 0.12f;
+                Prim(PrimitiveType.Cube, "Label", t, new Vector3(0, ly, front + 0.002f), new Vector3(w * 0.62f, lh, 0.003f), deco.label, collider: false);
+                int strokes = 2 + rnd.Next(3);
+                for (int i = 0; i < strokes; i++)
+                    Prim(PrimitiveType.Cube, "Title", t, new Vector3(0, ly + lh * (0.32f - i * 0.18f), front + 0.0038f), new Vector3(w * 0.3f, lh * 0.1f, 0.001f), deco.ink, collider: false);
+            }
+            else if (style == 1)
+            {
+                // 金の題名と、その下の小さな紋
+                Prim(PrimitiveType.Cube, "Title", t, new Vector3(0, h * 0.12f, front + 0.002f), new Vector3(w * 0.45f, h * 0.28f, 0.003f), deco.gold, collider: false);
+                Prim(PrimitiveType.Cube, "Crest", t, new Vector3(0, -h * 0.24f, front + 0.002f), new Vector3(w * 0.4f, w * 0.4f, 0.003f), deco.gold, new Vector3(0, 0, 45), collider: false);
+            }
+            else if (style == 2)
+            {
+                // 背の中ほどに色違いの帯（シリーズものの巻数のような印）
+                Prim(PrimitiveType.Cube, "Mark", t, new Vector3(0, -h * 0.2f, front + 0.002f), new Vector3(w * 1.01f, h * 0.08f, 0.004f), deco.label, collider: false);
+                Prim(PrimitiveType.Cube, "Title", t, new Vector3(0, h * 0.12f, front + 0.002f), new Vector3(w * 0.35f, h * 0.3f, 0.003f), deco.gold, collider: false);
+            }
         }
 
         static void BuildAndon(Transform t, Vector3 pos, Material wood, bool lit)
@@ -878,7 +1011,7 @@ namespace JPHACKS2026.Editor
             var ride = Group("Ride", t, Vector3.zero);
             Anchor(ride, "sea.ride");
             ride.AddComponent<Resettable>();
-            BuildTurtle("RideTurtle", ride.transform, new Vector3(0, -0.75f, 0.2f), 0, 2.2f, null);
+            BuildTurtle("RideTurtle", ride.transform, new Vector3(0, -0.75f, 0.2f), 0, 2.2f, null, swimming: true);
             Point("Seat", ride.transform, Vector3.zero, 0, "sea.seat");
             Point("End", t, new Vector3(0, 0, 40), 0, "sea.end");
 
