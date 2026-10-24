@@ -3,19 +3,23 @@ using UnityEngine;
 
 namespace JPHACKS2026.Editor
 {
-    /// <summary>FBXのマテリアル名を保ち、URPと同梱の模様テクスチャに対応させる。</summary>
+    /// <summary>
+    /// FBXのマテリアルをURP用に整え、模様テクスチャ（base_color.png）をBase Colorに割り当てる。
+    /// FBXでは模様の画像がMetallicに接続されて書き出されているため、ここでBase Colorにつなぎ直す。
+    /// </summary>
     public sealed class TamatebakoMaterialImporter : AssetPostprocessor
     {
         const string ModelPath = "Assets/_Project/Art/Models/Props/Tamatebako.fbx";
-        const string TexturePath = "Assets/_Project/Art/Models/Props/玉手箱.fbm/フタ_ベースカラー.png";
-        const string ImportVersion = "TamatebakoURPMaterials-v1";
+        const string TexturePath = "Assets/_Project/Art/Models/Props/玉手箱.fbm/base_color.png";
+        const string ImportVersion = "TamatebakoURPMaterials-v2";
 
-        public override uint GetVersion() => 1;
+        public override uint GetVersion() => 2;
 
         void OnPreprocessTexture()
         {
+            // Base Colorとして使う色の画像なのでsRGB
             if (assetPath == TexturePath)
-                ((TextureImporter)assetImporter).sRGBTexture = false;
+                ((TextureImporter)assetImporter).sRGBTexture = true;
         }
 
         void OnPostprocessMaterial(Material material)
@@ -31,10 +35,11 @@ namespace JPHACKS2026.Editor
             // BlenderのBase Colorはリニア値。Unityのマテリアル色にはsRGBで渡す。
             var color = new Color(0.20790951f, 0.008384568f, 0.006312439f).gamma;
             Texture2D texture = null;
-            if (material.name == "Material.001")
+            // 模様の画像がつながっているのはBlenderの「Material」（Unityでは「Material.001」になることがある）
+            if (material.name == "Material" || material.name.StartsWith("Material."))
             {
                 texture = AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
-                color = Color.black;
+                color = Color.white;   // 画像の色をそのまま出す
                 if (texture == null)
                     Debug.LogError("[Tamatebako] 模様の画像が見つかりません: " + TexturePath);
             }
@@ -43,14 +48,12 @@ namespace JPHACKS2026.Editor
             material.shader = shader;
             material.SetColor("_BaseColor", color);
             material.SetColor("_Color", color);
-            // FBXではこの白黒画像はBase ColorではなくMetallicに接続されている。
-            material.SetTexture("_BaseMap", null);
-            material.SetTexture("_MainTex", null);
-            material.SetTexture("_MetallicGlossMap", texture);
-            if (texture != null) material.EnableKeyword("_METALLICSPECGLOSSMAP");
-            else material.DisableKeyword("_METALLICSPECGLOSSMAP");
-            material.SetFloat("_Metallic", texture != null ? 0.6f : 0f);
-            material.SetFloat("_Smoothness", texture != null ? 0.8f : 0f);
+            material.SetTexture("_BaseMap", texture);
+            material.SetTexture("_MainTex", texture);
+            material.SetTexture("_MetallicGlossMap", null);
+            material.DisableKeyword("_METALLICSPECGLOSSMAP");
+            material.SetFloat("_Metallic", 0f);
+            material.SetFloat("_Smoothness", texture != null ? 0.6f : 0.3f);   // 漆のつや
             material.SetFloat("_Surface", 0f);
             material.SetFloat("_AlphaClip", 0f);
             material.SetOverrideTag("RenderType", "Opaque");
