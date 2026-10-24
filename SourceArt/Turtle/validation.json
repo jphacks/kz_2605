@@ -1,0 +1,21 @@
+{
+  "vertices": 19894,
+  "polygons": 23152,
+  "bones": 8,
+  "actions": {
+    "Swim": {
+      "frames": 61,
+      "seconds": 2.0,
+      "loop_checked": true
+    },
+    "Float": {
+      "frames": 121,
+      "seconds": 4.0,
+      "loop_checked": true
+    }
+  },
+  "fbx_actions": [
+    "SeaTurtle|SeaTurtle|Float",
+    "SeaTurtle|SeaTurtle|Swim"
+  ]
+}
