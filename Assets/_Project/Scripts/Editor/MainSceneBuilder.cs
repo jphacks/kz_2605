@@ -43,6 +43,7 @@ namespace JPHACKS2026.Editor
         {
             mats.Clear();
             Directory.CreateDirectory(MatDir);
+            TamatebakoMaterialImporter.Setup();   // 玉手箱のモデルにマテリアル（.mat）を割り当ててから組み立てる
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             var sun = new GameObject("Sun").AddComponent<Light>();
