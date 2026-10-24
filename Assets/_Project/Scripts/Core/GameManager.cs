@@ -107,6 +107,17 @@ namespace JPHACKS2026
         /// <summary>直前の選択肢から再開。章の導入ナレーションは聞き直さずに選択肢へ進む。</summary>
         public void RetryCheckpoint() => RunFlow(StoryFlow(Checkpoint, true));
         public void RestartStory() => BeginStory(Chapter.Beach);
+        /// <summary>タイトルのチャプター選択：その章の選択肢から始める（導入ナレーションは省略）。</summary>
+        public void JumpToChapter(Chapter c) => RunFlow(StoryFlow(c, true));
+
+        static readonly (Chapter chapter, string label)[] ChapterMenu =
+        {
+            (Chapter.Beach, "① 浜辺"),
+            (Chapter.Invite, "② 亀の誘い"),
+            (Chapter.Ryugu, "③ 竜宮城"),
+            (Chapter.Return, "④ 帰還"),
+            (Chapter.Village, "⑤ 玉手箱"),
+        };
 
         IEnumerator StoryFlow(Chapter from, bool skipIntro)
         {
@@ -163,19 +174,20 @@ namespace JPHACKS2026
             ShowHud(false);
             yield return book.Open();
 
-            int choice = -1;
+            System.Action start = null;
             var items = new List<(string, System.Action)>
             {
-                ("物語を始める", () => choice = 0),
+                ("物語を始める", () => start = () => BeginStory(Chapter.Beach)),
             };
-            bool hasSave = SaveData.TryGetCheckpoint(out var saved);
-            if (hasSave) items.Add(("続きから", () => choice = 1));
-            Menu.Show("おとぎ配信", "絵本の世界へ入ります", items.ToArray());
+            if (SaveData.TryGetCheckpoint(out var saved)) items.Add(("続きから", () => start = () => BeginStory(saved)));
+            foreach (var (chapter, label) in ChapterMenu)
+                items.Add((label, () => start = () => JumpToChapter(chapter)));
+            Menu.Show("おとぎ配信", "絵本の世界へ入ります\n<size=80%>チャプターを選ぶと、その選択肢から始まります</size>", items.ToArray());
             Menu.PlaceAt(StoryAnchor.Get("title.menu"));
-            while (choice < 0)
+            while (start == null)
             {
                 int k = GameInput.DebugNumberKeyDown();
-                if (k >= 0 && k < items.Count) choice = k;
+                if (k >= 0 && k < items.Count) items[k].Item2();
                 yield return null;
             }
             Menu.Hide();
@@ -186,7 +198,7 @@ namespace JPHACKS2026
             yield return Fader.FadeTo(Color.white, 1, 1.0f);
             book.SetGlow(0);
 
-            BeginStory(choice == 1 ? saved : Chapter.Beach);
+            start();
         }
 
         void CreateTitleHud()
