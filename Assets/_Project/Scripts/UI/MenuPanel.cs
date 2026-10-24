@@ -32,8 +32,10 @@ namespace JPHACKS2026
 
             var bg = UIFactory.CreateImage(canvas.transform, "Bg", UIFactory.PanelColor, new Vector2(Width, MinHeight));
             panel.bg = (RectTransform)bg.transform;
-            panel.title = UIFactory.CreateText(bg.transform, "Title", "", 64, Color.white, new Vector2(760, 110), new Vector2(0, 230));
-            panel.body = UIFactory.CreateText(bg.transform, "Body", "", 34, new Color(1, 1, 1, 0.85f), new Vector2(740, 150), new Vector2(0, 110));
+            UIFactory.Stretch((RectTransform)UIFactory.CreateImage(bg.transform, "Frame", new Color(0.95f, 0.75f, 0.3f, 0.9f), Vector2.zero).transform, 10);
+            UIFactory.Stretch((RectTransform)UIFactory.CreateImage(bg.transform, "Inner", UIFactory.PanelColor, Vector2.zero).transform, 14);
+            panel.title = UIFactory.CreateText(bg.transform, "Title", "", 72, UIFactory.PaperColor, new Vector2(760, 110), new Vector2(0, 230));
+            panel.body = UIFactory.CreateText(bg.transform, "Body", "", 40, Color.white, new Vector2(740, 170), new Vector2(0, 110));
             var root = new GameObject("Buttons", typeof(RectTransform));
             root.transform.SetParent(bg.transform, false);
             panel.buttonRoot = (RectTransform)root.transform;
@@ -54,12 +56,12 @@ namespace JPHACKS2026
             int rows = (items.Length + cols - 1) / cols;
             float w = cols == 1 ? 560 : 340, h = cols == 1 ? 90 : 76, gap = cols == 1 ? 22 : 16, colGap = 24;
             float buttonsHeight = rows * h + (rows - 1) * gap;
-            float height = Mathf.Max(MinHeight, 330 + buttonsHeight + 50);
+            float height = Mathf.Max(MinHeight, 340 + buttonsHeight + 50);
             float top = height / 2;
             bg.sizeDelta = new Vector2(Width, height);
             ((RectTransform)title.transform).anchoredPosition = new Vector2(0, top - 80);
-            ((RectTransform)body.transform).anchoredPosition = new Vector2(0, top - 200);
-            buttonRoot.anchoredPosition = new Vector2(0, top - 310 - buttonsHeight / 2);
+            ((RectTransform)body.transform).anchoredPosition = new Vector2(0, top - 205);
+            buttonRoot.anchoredPosition = new Vector2(0, top - 320 - buttonsHeight / 2);
 
             for (int i = 0; i < items.Length; i++)
             {

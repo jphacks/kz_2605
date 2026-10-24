@@ -9,6 +9,8 @@ namespace JPHACKS2026
     {
         Image image;
         public float Alpha => image.color.a;
+        /// <summary>白（明るい色）で覆われているか。光に包まれて場面が変わるときに使う。</summary>
+        public bool IsWhiteOut => image.enabled && image.color.a > 0.99f && image.color.grayscale > 0.5f;
 
         public static ScreenFader Create(Transform head)
         {

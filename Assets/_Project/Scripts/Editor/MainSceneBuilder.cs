@@ -100,6 +100,62 @@ namespace JPHACKS2026.Editor
             return m;
         }
 
+        /// <summary>光の演出用：半透明・両面表示のUnlit。色と透明度は Picturebook が MaterialPropertyBlock で変える。</summary>
+        static Material GlowMat(string name)
+        {
+            if (mats.TryGetValue(name, out var cached)) return cached;
+            var m = Mat(name, new Color(1f, 0.9f, 0.62f, 0.5f), unlit: true);
+            m.SetFloat("_Surface", 1);   // Transparent
+            m.SetFloat("_Blend", 0);     // Alpha
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0);
+            m.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);   // 光の球の内側からも見えるように
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        /// <summary>開いたページから立ちのぼる光の粒。Picturebook.SetGlow が放出量を決める。</summary>
+        static ParticleSystem BuildBookSparkles(Transform book)
+        {
+            var go = Group("Sparkles", book, new Vector3(-0.09f, 0.07f, 0));
+            go.transform.localRotation = Quaternion.Euler(-90, 0, 0);
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.2f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.25f, 0.6f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.008f, 0.022f);
+            main.maxParticles = 300;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 25f;
+            shape.radius = 0.15f;
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local;
+            vel.orbitalZ = new ParticleSystem.MinMaxCurve(1.2f);   // くるくると渦を巻いて昇る
+            vel.radial = new ParticleSystem.MinMaxCurve(0.05f);
+            vel.x = vel.y = vel.z = new ParticleSystem.MinMaxCurve(0f);
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0, 0.3f), new Keyframe(0.3f, 1), new Keyframe(1, 0)));
+            var psr = go.GetComponent<ParticleSystemRenderer>();
+            psr.renderMode = ParticleSystemRenderMode.Mesh;
+            var tmp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            psr.mesh = tmp.GetComponent<MeshFilter>().sharedMesh;
+            Object.DestroyImmediate(tmp);
+            psr.sharedMaterial = Mat("Mote", new Color(1f, 0.88f, 0.55f), 2.5f, unlit: true);
+            return ps;
+        }
+
         static GameObject Group(string name, Transform parent, Vector3 localPos, float yaw = 0)
         {
             var go = new GameObject(name);
@@ -314,8 +370,21 @@ namespace JPHACKS2026.Editor
             return root;
         }
 
+        const string TamatebakoModelPath = "Assets/_Project/Art/Models/Props/玉手箱.fbx";
+
+        /// <summary>
+        /// 玉手箱。原点＝底面の中心、幅 0.32×scale。子の "Lid"（ふた）は単体でつかめるよう当たり判定を持つ。
+        /// モデル（玉手箱.fbx：本体「玉手箱_はこ」＋ふた「玉手箱_フタ」）があれば使い、なければ仮モデルで組む。
+        /// </summary>
         static GameObject BuildTamatebako(string name, Transform parent, Vector3 pos, float scale)
         {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(TamatebakoModelPath);
+            if (model != null)
+            {
+                var built = BuildTamatebakoFromModel(model, name, parent, pos, scale);
+                if (built != null) return built;
+            }
+
             var root = Group(name, parent, pos);
             var lacquer = Mat("BlackLacquer", new Color(0.08f, 0.06f, 0.06f));
             var red = Mat("RedCord", new Color(0.8f, 0.1f, 0.1f));
@@ -328,27 +397,87 @@ namespace JPHACKS2026.Editor
             return root;
         }
 
+        static GameObject BuildTamatebakoFromModel(GameObject model, string name, Transform parent, Vector3 pos, float scale)
+        {
+            // 原点・回転なしの場所で組み立ててから親に付ける（ワールド座標＝ローカル座標として計算できる）
+            var root = new GameObject(name);
+            var inst = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            PrefabUtility.UnpackPrefabInstance(inst, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            Transform baseMesh = null, lidMesh = null;
+            foreach (var r in inst.GetComponentsInChildren<Renderer>())
+            {
+                if (r.name.Contains("フタ")) lidMesh = r.transform;
+                else if (r.name.Contains("はこ")) baseMesh = r.transform;
+            }
+            if (baseMesh == null || lidMesh == null)
+            {
+                Debug.LogWarning($"[JPHACKS2026] 玉手箱モデルに「はこ」「フタ」のメッシュが見つからないため仮モデルを使います: {TamatebakoModelPath}");
+                Object.DestroyImmediate(inst);
+                Object.DestroyImmediate(root);
+                return null;
+            }
+
+            // 幅をそろえ、底面の中心が原点に来るように置く
+            var all = RendererBounds(inst.transform);
+            float k = 0.32f * scale / Mathf.Max(all.size.x, all.size.z);
+            inst.transform.localScale *= k;
+            all = RendererBounds(inst.transform);
+            inst.transform.position -= new Vector3(all.center.x, all.min.y, all.center.z);
+
+            var visual = inst.transform;
+            visual.name = "Visual";
+            visual.SetParent(root.transform, true);
+
+            var baseBounds = baseMesh.GetComponent<Renderer>().bounds;
+            var baseCol = Group("Base", root.transform, baseBounds.center).AddComponent<BoxCollider>();
+            baseCol.size = baseBounds.size;
+
+            // ふた：つかむ・持ち上げる対象。メッシュを "Lid" の子にする
+            var lidBounds = lidMesh.GetComponent<Renderer>().bounds;
+            var lid = new GameObject("Lid");
+            lid.transform.SetParent(root.transform, false);
+            lid.transform.localPosition = lidBounds.center;
+            lidMesh.SetParent(lid.transform, true);
+            var lidCol = lid.AddComponent<BoxCollider>();
+            lidCol.size = lidBounds.size;
+
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = pos;
+            return root;
+        }
+
+        static Bounds RendererBounds(Transform t)
+        {
+            var rs = t.GetComponentsInChildren<Renderer>();
+            var b = rs[0].bounds;
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            return b;
+        }
+
         // ── タイトル（絵本の部屋） ──────────────────────
 
         static void BuildTitle(Vector3 origin)
         {
             var area = MakeArea("title", origin, Vector3.zero, 0);
             area.walkHalfExtents = new Vector2(1.5f, 1.5f);
-            area.skyColor = new Color(0.04f, 0.04f, 0.1f);
-            area.ambientColor = new Color(0.45f, 0.42f, 0.5f);
-            area.sunColor = new Color(1f, 0.9f, 0.75f);
-            area.sunIntensity = 0.8f;
+            area.skyColor = new Color(0.03f, 0.04f, 0.12f);
+            area.ambientColor = new Color(0.3f, 0.28f, 0.4f);
+            area.sunColor = new Color(0.65f, 0.75f, 1f);   // 窓から差しこむ月明かり
+            area.sunIntensity = 0.45f;
+            area.sunEuler = new Vector3(35, 180, 0);
             var t = area.transform;
 
-            Prim(PrimitiveType.Cylinder, "Floor", t, new Vector3(0, -0.05f, 0), new Vector3(8, 0.05f, 8), Mat("TitleFloor", new Color(0.3f, 0.2f, 0.15f)));
-            Prim(PrimitiveType.Cylinder, "Pedestal", t, new Vector3(0, 0.45f, 0.55f), new Vector3(0.45f, 0.45f, 0.45f), Mat("Wood", new Color(0.45f, 0.3f, 0.18f)));
-            var rnd = new System.Random(7);
-            var star = Mat("Star", new Color(1f, 0.95f, 0.8f), 2f, unlit: true);
-            for (int i = 0; i < 70; i++)
-            {
-                var dir = new Vector3((float)rnd.NextDouble() * 2 - 1, (float)rnd.NextDouble() * 0.9f + 0.1f, (float)rnd.NextDouble() * 2 - 1).normalized;
-                Prim(PrimitiveType.Sphere, "Star", t, dir * 25f, Vector3.one * (0.08f + (float)rnd.NextDouble() * 0.12f), star, collider: false);
-            }
+            BuildTitleRoom(t);
+            BuildTitleNightView(t);
+
+            // 書見台
+            var wood = Mat("Wood", new Color(0.45f, 0.3f, 0.18f));
+            var darkWood = Mat("DarkWood", new Color(0.25f, 0.15f, 0.09f));
+            var gold = Mat("Gold", new Color(0.95f, 0.75f, 0.25f), 0.3f);
+            Prim(PrimitiveType.Cylinder, "PedestalBase", t, new Vector3(0, 0.03f, 0.55f), new Vector3(0.6f, 0.03f, 0.6f), darkWood);
+            Prim(PrimitiveType.Cylinder, "PedestalColumn", t, new Vector3(0, 0.45f, 0.55f), new Vector3(0.18f, 0.42f, 0.18f), wood);
+            Prim(PrimitiveType.Cylinder, "PedestalRing", t, new Vector3(0, 0.62f, 0.55f), new Vector3(0.22f, 0.015f, 0.22f), gold, collider: false);
+            Prim(PrimitiveType.Cube, "PedestalTop", t, new Vector3(0, 0.88f, 0.55f), new Vector3(0.52f, 0.04f, 0.4f), darkWood);
 
             // 絵本
             var book = Group("Picturebook", t, new Vector3(0, 0.92f, 0.55f));
@@ -362,14 +491,29 @@ namespace JPHACKS2026.Editor
             Prim(PrimitiveType.Cube, "CoverDeco", hinge.transform, new Vector3(0.18f, 0.009f, 0), new Vector3(0.2f, 0.003f, 0.12f), Mat("Gold", new Color(0.95f, 0.75f, 0.25f), 0.3f), collider: false);
             pb.coverHinge = hinge.transform;
             pb.openAngle = 175f;
-            var glow = Prim(PrimitiveType.Sphere, "Glow", book.transform, new Vector3(0, 0.1f, 0), Vector3.one * 0.3f, Mat("Glow", new Color(1f, 0.9f, 0.5f), 3f, unlit: true), collider: false);
+            // 吸い込まれる光：ページが灯る → 光の筋と粒 → 半透明の光がプレイヤーを包む（Picturebook.SetGlow）
+            var glowMat = GlowMat("BookGlow");
+            var pageGlow = Prim(PrimitiveType.Cube, "PageGlow", book.transform, new Vector3(-0.18f, 0.062f, 0), new Vector3(0.7f, 0.002f, 0.25f), glowMat, collider: false);
+            pageGlow.GetComponent<Renderer>().enabled = false;
+            pb.pageGlow = pageGlow.GetComponent<Renderer>();
+            var rays = Group("Rays", book.transform, new Vector3(-0.09f, 0.06f, 0));   // 見開きの中央寄り
+            for (int i = 0; i < 7; i++)
+            {
+                var pivot = Group("RayPivot", rays.transform, Vector3.zero, i * 360f / 7);
+                pivot.transform.localRotation *= Quaternion.Euler(12f + (i % 3) * 6f, 0, 0);
+                Prim(PrimitiveType.Cube, "Ray", pivot.transform, new Vector3(0, 0.45f, 0), new Vector3(0.025f + (i % 2) * 0.015f, 0.9f, 0.002f), glowMat, collider: false);
+            }
+            rays.SetActive(false);
+            pb.rays = rays.transform;
+            pb.sparkles = BuildBookSparkles(book.transform);
+            var glow = Prim(PrimitiveType.Sphere, "Glow", book.transform, new Vector3(-0.09f, 0.15f, 0), Vector3.one * 0.3f, glowMat, collider: false);
             glow.SetActive(false);
             pb.glowRenderer = glow.GetComponent<Renderer>();
             var light = new GameObject("GlowLight").AddComponent<Light>();
             light.transform.SetParent(book.transform, false);
             light.transform.localPosition = new Vector3(0, 0.3f, 0);
             light.type = LightType.Point;
-            light.color = new Color(1f, 0.85f, 0.5f);
+            light.color = new Color(1f, 0.85f, 0.55f);
             light.range = 4;
             light.enabled = false;
             pb.glowLight = light;
@@ -379,8 +523,252 @@ namespace JPHACKS2026.Editor
             pb.openTrigger.requireGrip = true;
             pb.openTrigger.armedVisual = Ring("BookMarker", t, new Vector3(0, 0.905f, 0.55f), 0.5f, new Color(1f, 0.85f, 0.3f));
 
+            // 絵本からこぼれた物語のかけら：ページが頭上をゆっくり舞う
+            var page = Mat("Paper", new Color(0.98f, 0.95f, 0.88f));
+            var rnd = new System.Random(11);
+            for (int i = 0; i < 9; i++)
+            {
+                var p = Prim(PrimitiveType.Cube, "FloatingPage", t, Vector3.zero, new Vector3(0.16f, 0.004f, 0.22f), page, collider: false);
+                var sw = p.AddComponent<Swimmer>();
+                sw.center = new Vector3(0, 2.35f + (float)rnd.NextDouble() * 0.3f, 0.6f);
+                sw.radius = 0.8f + (float)rnd.NextDouble() * 0.6f;
+                sw.speed = 0.12f + (float)rnd.NextDouble() * 0.12f;
+                sw.verticalAmplitude = 0.12f;
+            }
+
+            BuildTitleMotes(t);
+
+            // 物語の小物：亀・玉手箱・配信用マイク
+            var turtle = BuildTurtle("MiniTurtle", t, new Vector3(0.95f, 0, 1.05f), 220, 0.35f, null);
+            turtle.GetComponent<SimpleCharacter>().idleAmplitude = 0.01f;
+            BuildSideTable(t, new Vector3(-0.95f, 0, 0.9f), darkWood);
+            BuildTamatebako("MiniTamatebako", t, new Vector3(-1.0f, 0.62f, 0.95f), 0.55f);
+            BuildCandle(t, new Vector3(-0.82f, 0.62f, 0.78f));
+            BuildMicStand(t, new Vector3(0.8f, 0, 0.2f));
+
             Point("Hud", t, new Vector3(0, 1.85f, 2.4f), 0, "title.hud");
             Point("MenuAnchor", t, new Vector3(0, 1.38f, 1.15f), 0, "title.menu");
+        }
+
+        /// <summary>夜の書斎：板張りの床・じゅうたん・壁・天井の梁・本棚・行灯・ON AIRランプ。</summary>
+        static void BuildTitleRoom(Transform t)
+        {
+            const float halfW = 2.6f, front = -2.2f, back = 3.2f, height = 3f;
+            const float midZ = (front + back) / 2, depth = back - front;
+            var rnd = new System.Random(3);
+
+            // 床（色違いの板を並べる）
+            var plankA = Mat("PlankA", new Color(0.36f, 0.24f, 0.16f));
+            var plankB = Mat("PlankB", new Color(0.31f, 0.2f, 0.13f));
+            Prim(PrimitiveType.Cube, "Floor", t, new Vector3(0, -0.05f, midZ), new Vector3(halfW * 2, 0.1f, depth), plankA);
+            for (int i = 0; i < 17; i++)
+                Prim(PrimitiveType.Cube, "Plank", t, new Vector3(-halfW + 0.15f + i * 0.31f, 0.001f, midZ), new Vector3(0.29f, 0.002f, depth), i % 2 == 0 ? plankB : plankA, collider: false);
+
+            // じゅうたん
+            var gold = Mat("Gold", new Color(0.95f, 0.75f, 0.25f), 0.3f);
+            Prim(PrimitiveType.Cylinder, "RugBorder", t, new Vector3(0, 0.006f, 0.4f), new Vector3(2.5f, 0.004f, 2.5f), gold, collider: false);
+            Prim(PrimitiveType.Cylinder, "Rug", t, new Vector3(0, 0.01f, 0.4f), new Vector3(2.35f, 0.004f, 2.35f), Mat("RugRed", new Color(0.55f, 0.1f, 0.12f)), collider: false);
+            Prim(PrimitiveType.Cylinder, "RugInner", t, new Vector3(0, 0.014f, 0.4f), new Vector3(1.5f, 0.004f, 1.5f), Mat("RugNavy", new Color(0.12f, 0.14f, 0.32f)), collider: false);
+
+            // 壁：奥の壁には窓をあける（x -1.3〜1.3, y 0.9〜2.6）
+            var wall = Mat("TitleWall", new Color(0.18f, 0.2f, 0.38f));
+            var darkWood = Mat("DarkWood", new Color(0.25f, 0.15f, 0.09f));
+            Prim(PrimitiveType.Cube, "WallLeft", t, new Vector3(-halfW, height / 2, midZ), new Vector3(0.1f, height, depth), wall);
+            Prim(PrimitiveType.Cube, "WallRight", t, new Vector3(halfW, height / 2, midZ), new Vector3(0.1f, height, depth), wall);
+            Prim(PrimitiveType.Cube, "WallFront", t, new Vector3(0, height / 2, front), new Vector3(halfW * 2, height, 0.1f), wall);
+            Prim(PrimitiveType.Cube, "WallBackL", t, new Vector3(-1.95f, height / 2, back), new Vector3(1.3f, height, 0.1f), wall);
+            Prim(PrimitiveType.Cube, "WallBackR", t, new Vector3(1.95f, height / 2, back), new Vector3(1.3f, height, 0.1f), wall);
+            Prim(PrimitiveType.Cube, "WallBackBottom", t, new Vector3(0, 0.45f, back), new Vector3(2.6f, 0.9f, 0.1f), wall);
+            Prim(PrimitiveType.Cube, "WallBackTop", t, new Vector3(0, 2.8f, back), new Vector3(2.6f, 0.4f, 0.1f), wall);
+            // 腰板
+            Prim(PrimitiveType.Cube, "WainscotL", t, new Vector3(-halfW + 0.06f, 0.45f, midZ), new Vector3(0.02f, 0.9f, depth), darkWood, collider: false);
+            Prim(PrimitiveType.Cube, "WainscotR", t, new Vector3(halfW - 0.06f, 0.45f, midZ), new Vector3(0.02f, 0.9f, depth), darkWood, collider: false);
+            Prim(PrimitiveType.Cube, "WainscotF", t, new Vector3(0, 0.45f, front + 0.06f), new Vector3(halfW * 2, 0.9f, 0.02f), darkWood, collider: false);
+            Prim(PrimitiveType.Cube, "WainscotB", t, new Vector3(0, 0.45f, back - 0.06f), new Vector3(halfW * 2, 0.9f, 0.02f), darkWood, collider: false);
+
+            // 天井と梁
+            Prim(PrimitiveType.Cube, "Ceiling", t, new Vector3(0, height, midZ), new Vector3(halfW * 2, 0.1f, depth), Mat("Ceiling", new Color(0.2f, 0.13f, 0.09f)), collider: false);
+            for (int i = 0; i < 4; i++)
+                Prim(PrimitiveType.Cube, "Beam", t, new Vector3(0, height - 0.1f, front + 0.6f + i * 1.4f), new Vector3(halfW * 2, 0.14f, 0.16f), darkWood, collider: false);
+
+            // 窓枠と格子
+            var frame = Mat("WindowFrame", new Color(0.2f, 0.12f, 0.07f));
+            Prim(PrimitiveType.Cube, "WindowSill", t, new Vector3(0, 0.88f, back - 0.08f), new Vector3(2.8f, 0.06f, 0.26f), frame);
+            Prim(PrimitiveType.Cube, "WindowTop", t, new Vector3(0, 2.62f, back - 0.04f), new Vector3(2.8f, 0.07f, 0.16f), frame, collider: false);
+            for (int i = 0; i <= 4; i++)
+                Prim(PrimitiveType.Cube, "WindowBarV", t, new Vector3(-1.3f + i * 0.65f, 1.75f, back - 0.02f), new Vector3(i % 4 == 0 ? 0.08f : 0.03f, 1.7f, 0.04f), frame, collider: false);
+            Prim(PrimitiveType.Cube, "WindowBarH", t, new Vector3(0, 1.75f, back - 0.02f), new Vector3(2.6f, 0.03f, 0.04f), frame, collider: false);
+
+            // ON AIR ランプ（窓の上）
+            var onAir = Group("OnAirSign", t, new Vector3(0, 2.83f, back - 0.07f));
+            Prim(PrimitiveType.Cube, "Box", onAir.transform, Vector3.zero, new Vector3(0.62f, 0.2f, 0.06f), Mat("OnAirRed", new Color(0.9f, 0.12f, 0.1f), 2.2f), collider: false);
+            var label = new GameObject("Label").AddComponent<TextMeshPro>();
+            label.transform.SetParent(onAir.transform, false);
+            label.transform.localPosition = new Vector3(0, 0, -0.035f);
+            label.rectTransform.sizeDelta = new Vector2(0.6f, 0.2f);
+            label.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
+            label.text = "ON AIR";
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 0.2f;
+            label.fontSizeMax = 2f;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = new Color(1f, 0.95f, 0.9f);
+            var onAirLight = new GameObject("OnAirLight").AddComponent<Light>();
+            onAirLight.transform.SetParent(onAir.transform, false);
+            onAirLight.transform.localPosition = new Vector3(0, -0.1f, -0.3f);
+            onAirLight.type = LightType.Point;
+            onAirLight.color = new Color(1f, 0.25f, 0.2f);
+            onAirLight.range = 1.6f;
+            onAirLight.intensity = 0.8f;
+
+            // 本棚（左右の壁ぎわに2つずつ）
+            var spines = new[]
+            {
+                Mat("Spine0", new Color(0.6f, 0.15f, 0.12f)), Mat("Spine1", new Color(0.15f, 0.3f, 0.55f)), Mat("Spine2", new Color(0.2f, 0.45f, 0.25f)),
+                Mat("Spine3", new Color(0.85f, 0.65f, 0.3f)), Mat("Spine4", new Color(0.45f, 0.25f, 0.5f)), Mat("Spine5", new Color(0.9f, 0.85f, 0.75f)),
+            };
+            foreach (float side in new[] { -1f, 1f })
+            foreach (float z in new[] { -0.9f, 1.7f })
+            {
+                var shelf = Group("Bookshelf", t, new Vector3(side * (halfW - 0.22f), 0, z), side < 0 ? 90 : -90);
+                var st = shelf.transform;
+                Prim(PrimitiveType.Cube, "Back", st, new Vector3(0, 1.1f, -0.15f), new Vector3(1.2f, 2.2f, 0.03f), darkWood);
+                Prim(PrimitiveType.Cube, "SideL", st, new Vector3(-0.59f, 1.1f, 0), new Vector3(0.03f, 2.2f, 0.32f), darkWood, collider: false);
+                Prim(PrimitiveType.Cube, "SideR", st, new Vector3(0.59f, 1.1f, 0), new Vector3(0.03f, 2.2f, 0.32f), darkWood, collider: false);
+                for (int k = 0; k < 5; k++)
+                {
+                    float y = 0.05f + k * 0.52f;
+                    Prim(PrimitiveType.Cube, "Board", st, new Vector3(0, y, 0), new Vector3(1.18f, 0.03f, 0.32f), darkWood, collider: false);
+                    if (k == 4) break;
+                    float x = -0.54f;
+                    while (x < 0.5f)
+                    {
+                        if (rnd.NextDouble() < 0.08) { x += 0.08f; continue; }   // ところどころ隙間
+                        float w = 0.035f + (float)rnd.NextDouble() * 0.04f;
+                        float h = 0.28f + (float)rnd.NextDouble() * 0.16f;
+                        Prim(PrimitiveType.Cube, "Book", st, new Vector3(x + w / 2, y + 0.015f + h / 2, 0.01f), new Vector3(w, h, 0.22f), spines[rnd.Next(spines.Length)], collider: false);
+                        x += w + 0.004f;
+                    }
+                }
+            }
+
+            // 行灯（部屋の四隅）
+            foreach (var pos in new[] { new Vector3(-2.1f, 0, 2.7f), new Vector3(2.1f, 0, 2.7f), new Vector3(-2.1f, 0, -1.7f), new Vector3(2.1f, 0, -1.7f) })
+                BuildAndon(t, pos, darkWood, lit: pos.z > 0);
+        }
+
+        static void BuildAndon(Transform t, Vector3 pos, Material wood, bool lit)
+        {
+            var r = Group("Andon", t, pos).transform;
+            Prim(PrimitiveType.Cube, "Paper", r, new Vector3(0, 0.55f, 0), new Vector3(0.3f, 0.5f, 0.3f), Mat("AndonPaper", new Color(1f, 0.82f, 0.55f), 1.6f), collider: false);
+            foreach (var (x, z) in new[] { (-0.16f, -0.16f), (0.16f, -0.16f), (-0.16f, 0.16f), (0.16f, 0.16f) })
+                Prim(PrimitiveType.Cube, "Leg", r, new Vector3(x, 0.42f, z), new Vector3(0.03f, 0.84f, 0.03f), wood, collider: false);
+            Prim(PrimitiveType.Cube, "Top", r, new Vector3(0, 0.82f, 0), new Vector3(0.36f, 0.03f, 0.36f), wood, collider: false);
+            Prim(PrimitiveType.Cube, "Bottom", r, new Vector3(0, 0.29f, 0), new Vector3(0.36f, 0.03f, 0.36f), wood, collider: false);
+            if (!lit) return;   // 実際に照らすのは奥の2つだけ（Questの負荷対策）
+            var light = new GameObject("Light").AddComponent<Light>();
+            light.transform.SetParent(r, false);
+            light.transform.localPosition = new Vector3(0, 0.6f, 0);
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.72f, 0.4f);
+            light.range = 3.5f;
+            var flicker = light.gameObject.AddComponent<LightFlicker>();
+            flicker.baseIntensity = 1.4f;
+            flicker.amount = 0.12f;
+            flicker.speed = 1.5f;
+        }
+
+        static void BuildSideTable(Transform t, Vector3 pos, Material wood)
+        {
+            var r = Group("SideTable", t, pos).transform;
+            Prim(PrimitiveType.Cylinder, "Top", r, new Vector3(0, 0.6f, 0), new Vector3(0.5f, 0.02f, 0.5f), wood);
+            Prim(PrimitiveType.Cylinder, "Leg", r, new Vector3(0, 0.3f, 0), new Vector3(0.06f, 0.3f, 0.06f), wood, collider: false);
+            Prim(PrimitiveType.Cylinder, "Foot", r, new Vector3(0, 0.015f, 0), new Vector3(0.3f, 0.015f, 0.3f), wood, collider: false);
+        }
+
+        static void BuildCandle(Transform t, Vector3 pos)
+        {
+            var r = Group("Candle", t, pos).transform;
+            Prim(PrimitiveType.Cylinder, "Dish", r, new Vector3(0, 0.005f, 0), new Vector3(0.1f, 0.005f, 0.1f), Mat("Gold", new Color(0.95f, 0.75f, 0.25f), 0.3f), collider: false);
+            Prim(PrimitiveType.Cylinder, "Wax", r, new Vector3(0, 0.06f, 0), new Vector3(0.035f, 0.055f, 0.035f), Mat("Wax", new Color(0.97f, 0.93f, 0.85f)), collider: false);
+            Prim(PrimitiveType.Sphere, "Flame", r, new Vector3(0, 0.135f, 0), new Vector3(0.018f, 0.035f, 0.018f), Mat("Flame", new Color(1f, 0.75f, 0.3f), 3f, unlit: true), collider: false);
+            var light = new GameObject("Light").AddComponent<Light>();
+            light.transform.SetParent(r, false);
+            light.transform.localPosition = new Vector3(0, 0.18f, 0);
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.7f, 0.35f);
+            light.range = 1.8f;
+            var flicker = light.gameObject.AddComponent<LightFlicker>();
+            flicker.baseIntensity = 0.9f;
+            flicker.amount = 0.3f;
+            flicker.speed = 5f;
+        }
+
+        /// <summary>「配信」らしさ：レトロなスタンドマイク。</summary>
+        static void BuildMicStand(Transform t, Vector3 pos)
+        {
+            var r = Group("MicStand", t, pos, -20).transform;
+            var metal = Mat("Metal", new Color(0.55f, 0.55f, 0.6f));
+            var black = Mat("Black", new Color(0.05f, 0.05f, 0.05f));
+            Prim(PrimitiveType.Cylinder, "Base", r, new Vector3(0, 0.015f, 0), new Vector3(0.22f, 0.015f, 0.22f), black);
+            Prim(PrimitiveType.Cylinder, "Pole", r, new Vector3(0, 0.6f, 0), new Vector3(0.02f, 0.6f, 0.02f), metal, collider: false);
+            Prim(PrimitiveType.Capsule, "Head", r, new Vector3(0, 1.28f, 0), new Vector3(0.07f, 0.07f, 0.07f), metal, collider: false);
+            Prim(PrimitiveType.Cylinder, "Grill", r, new Vector3(0, 1.28f, 0), new Vector3(0.075f, 0.02f, 0.075f), black, collider: false);
+        }
+
+        /// <summary>窓の外：月夜の海と星空、水平線の向こうにかすかに光る竜宮城。</summary>
+        static void BuildTitleNightView(Transform t)
+        {
+            Prim(PrimitiveType.Cube, "SkyBackdrop", t, new Vector3(0, 8, 30), new Vector3(60, 30, 0.1f), Mat("NightSky", new Color(0.04f, 0.06f, 0.18f), unlit: true), collider: false);
+            Prim(PrimitiveType.Cube, "NightSea", t, new Vector3(0, -0.4f, 17), new Vector3(60, 0.05f, 26), Mat("NightSea", new Color(0.03f, 0.08f, 0.2f), unlit: true), collider: false);
+            Prim(PrimitiveType.Sphere, "Moon", t, new Vector3(5.5f, 9f, 28f), Vector3.one * 3.2f, Mat("Moon", new Color(1f, 0.96f, 0.82f), 2.5f, unlit: true), collider: false);
+            Prim(PrimitiveType.Cube, "MoonReflection", t, new Vector3(3.2f, -0.36f, 18f), new Vector3(0.5f, 0.01f, 20f), Mat("MoonReflection", new Color(0.9f, 0.85f, 0.6f), 1.5f, unlit: true), collider: false);
+            // 水平線の竜宮城のシルエット
+            var castle = Mat("CastleGlow", new Color(0.9f, 0.35f, 0.3f), 1.2f, unlit: true);
+            Prim(PrimitiveType.Cube, "Castle", t, new Vector3(-6f, 0.4f, 29.5f), new Vector3(3f, 1.4f, 0.1f), castle, collider: false);
+            Prim(PrimitiveType.Cube, "CastleTower", t, new Vector3(-6f, 1.6f, 29.5f), new Vector3(1.2f, 1.6f, 0.1f), castle, collider: false);
+            Prim(PrimitiveType.Cube, "CastleRoof", t, new Vector3(-6f, 2.5f, 29.5f), new Vector3(2f, 0.25f, 0.1f), castle, collider: false);
+
+            var rnd = new System.Random(7);
+            var star = Mat("Star", new Color(1f, 0.95f, 0.8f), 2f, unlit: true);
+            for (int i = 0; i < 90; i++)
+            {
+                var pos = new Vector3(((float)rnd.NextDouble() - 0.5f) * 50f, 2f + (float)rnd.NextDouble() * 20f, 29.8f);
+                Prim(PrimitiveType.Sphere, "Star", t, pos, Vector3.one * (0.06f + (float)rnd.NextDouble() * 0.14f), star, collider: false);
+            }
+        }
+
+        /// <summary>部屋に漂う光の粒。</summary>
+        static void BuildTitleMotes(Transform t)
+        {
+            var go = Group("Motes", t, new Vector3(0, 1.5f, 0.5f));
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.loop = true;
+            main.prewarm = true;
+            main.startLifetime = 8f;
+            main.startSpeed = 0.04f;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.008f, 0.02f);
+            main.maxParticles = 120;
+            var emission = ps.emission;
+            emission.rateOverTime = 14f;
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            shape.scale = new Vector3(4.4f, 2.4f, 4.6f);
+            var noise = ps.noise;
+            noise.enabled = true;
+            noise.strength = 0.05f;
+            noise.frequency = 0.3f;
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0, 0), new Keyframe(0.2f, 1), new Keyframe(0.8f, 1), new Keyframe(1, 0)));
+            var psr = go.GetComponent<ParticleSystemRenderer>();
+            psr.renderMode = ParticleSystemRenderMode.Mesh;
+            var tmp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            psr.mesh = tmp.GetComponent<MeshFilter>().sharedMesh;
+            Object.DestroyImmediate(tmp);
+            psr.sharedMaterial = Mat("Mote", new Color(1f, 0.88f, 0.55f), 2.5f, unlit: true);
         }
 
         // ── 浜辺 ─────────────────────────────────────
@@ -670,7 +1058,7 @@ namespace JPHACKS2026.Editor
 
             var smokeGo = new GameObject("Smoke");
             smokeGo.transform.SetParent(box.transform, false);
-            smokeGo.transform.localPosition = new Vector3(0, 0.25f, 0);
+            smokeGo.transform.localPosition = lid.transform.localPosition;
             smokeGo.transform.localRotation = Quaternion.Euler(-90, 0, 0);
             var ps = smokeGo.AddComponent<ParticleSystem>();
             var main = ps.main;

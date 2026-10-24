@@ -164,6 +164,8 @@ namespace JPHACKS2026
             L("ed7_03", N, "浦島太郎は、朝日に向かって歩き出しました。"),
         };
 
+        public static readonly Line[] Medetashi = { L("medetashi", N, "めでたし、めでたし。") };
+
         public static readonly Line[] TimeUp =
         {
             L("timeup_01", N, "……浦島太郎は、ただ立ち尽くしていました。"),

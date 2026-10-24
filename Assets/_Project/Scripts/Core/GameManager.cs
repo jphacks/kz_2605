@@ -135,6 +135,8 @@ namespace JPHACKS2026
         public IEnumerator GoToArea(string id, Transform spawn = null, float fade = 0.6f, System.Action afterSwitch = null)
         {
             if (Fader.Alpha < 0.99f) yield return Fader.FadeOut(fade);
+            // 光に包まれて来たときは、光がほどけるようにゆっくり場面を見せる
+            if (Fader.IsWhiteOut) fade = Mathf.Max(fade, 1.8f);
             SwitchArea(id, spawn);
             afterSwitch?.Invoke();
             yield return null;
@@ -192,10 +194,11 @@ namespace JPHACKS2026
             }
             Menu.Hide();
 
-            // 絵本が光り、本の中に吸い込まれる
-            StartCoroutine(book.GlowUp(2.0f));
-            yield return Tween.Wait(1.2f);
-            yield return Fader.FadeTo(Color.white, 1, 1.0f);
+            // 絵本が光り、本の中に吸い込まれる：ページが灯る → 光の筋と粒 → 光に包まれて白く溶ける
+            StartCoroutine(book.GlowUp(3.4f));
+            yield return Tween.Wait(2.3f);
+            yield return Fader.FadeTo(new Color(1f, 0.97f, 0.9f), 1, 1.6f);
+            yield return Tween.Wait(0.3f);
             book.SetGlow(0);
 
             start();
@@ -209,10 +212,13 @@ namespace JPHACKS2026
             canvas.transform.localRotation = Quaternion.identity;
             canvas.transform.localScale = Vector3.one * 0.0015f;
             hud = canvas.gameObject;
-            UIFactory.CreateText(canvas.transform, "Title", "おとぎ配信", 150, UIFactory.PaperColor, new Vector2(1400, 220), new Vector2(0, 220));
-            UIFactory.CreateText(canvas.transform, "Sub", "〜 え！本当に… 絵本の世界へ 〜", 54, new Color(1, 0.9f, 0.7f), new Vector2(1400, 90), new Vector2(0, 90));
-            UIFactory.CreateText(canvas.transform, "Guide", "目の前の絵本に手をのばして\nグリップボタンで開こう", 52, Color.white, new Vector2(1400, 160), new Vector2(0, -90));
-            hudText = UIFactory.CreateText(canvas.transform, "Count", "", 40, new Color(1, 1, 1, 0.7f), new Vector2(500, 60), new Vector2(430, -300), TextAlignmentOptions.Right);
+            // 窓の格子や月に重なっても読めるよう、文字の後ろに板を敷き、縁取りをつける
+            UIFactory.CreateImage(canvas.transform, "Backdrop", UIFactory.PanelColor, new Vector2(1300, 640));
+            UIFactory.CreateImage(canvas.transform, "Line", new Color(0.95f, 0.75f, 0.3f, 0.8f), new Vector2(900, 4), new Vector2(0, 30));
+            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Title", "おとぎ配信", 150, UIFactory.PaperColor, new Vector2(1300, 220), new Vector2(0, 170)), 0.2f);
+            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Sub", "〜 え！本当に… 絵本の世界へ 〜", 58, new Color(1, 0.88f, 0.6f), new Vector2(1300, 90), new Vector2(0, 75)), 0.15f);
+            UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Guide", "目の前の絵本に手をのばして\nグリップボタンで開こう", 54, Color.white, new Vector2(1300, 160), new Vector2(0, -90)), 0.15f);
+            hudText = UIFactory.CreateText(canvas.transform, "Count", "", 40, new Color(1, 1, 1, 0.85f), new Vector2(560, 60), new Vector2(330, -270), TextAlignmentOptions.Right);
         }
 
         void ShowHud(bool show)
@@ -236,14 +242,17 @@ namespace JPHACKS2026
             var book = StoryAnchor.Get<Picturebook>("title.book");
             book.SetOpenImmediate(true);
             yield return Tween.Wait(0.3f);
+            StartCoroutine(book.GlowTo(0.2f, 1.0f));   // 物語を終えたページがほのかに光る
             yield return Fader.FadeIn(1.0f);
-            yield return Tween.Wait(0.5f);
+            yield return Medetashi();
+            StartCoroutine(book.GlowTo(0f, 1.2f));
             yield return book.Close();
 
             bool isNew = SaveData.RecordEnding(id);
             SaveData.ClearCheckpoint();
-            string body = $"{id}『{EndingCatalog.Title(id)}』（{EndingCatalog.Genre(id)}）\n"
-                        + $"達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}" + (isNew ? "  <color=#FFD27A>NEW!</color>" : "");
+            string body = $"<size=130%><color=#FFE6B0>『{EndingCatalog.Title(id)}』</color></size>"
+                        + (isNew ? "  <color=#FFD27A><size=80%>NEW!</size></color>" : "") + "\n"
+                        + $"<size=80%>{id}　{EndingCatalog.Genre(id)}　／　達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}</size>";
             Menu.Show("おわり", body,
                 ("タイトルに戻る", GoToTitle),
                 ("直前の選択肢に戻る", RetryCheckpoint));
@@ -255,6 +264,23 @@ namespace JPHACKS2026
                 if (k == 1) { RetryCheckpoint(); yield break; }
                 yield return null;
             }
+        }
+
+        /// <summary>開いた絵本の上に「めでたし めでたし」を浮かべ、読み上げてから消す。</summary>
+        IEnumerator Medetashi()
+        {
+            var canvas = UIFactory.CreateCanvas("Medetashi", new Vector2(1000, 260), StoryAnchor.Get("title.menu"));
+            canvas.transform.localPosition = new Vector3(0, -0.05f, -0.2f);
+            canvas.transform.localRotation = Quaternion.identity;
+            canvas.transform.localScale = Vector3.one * 0.0012f;
+            var text = UIFactory.CreateText(canvas.transform, "Text", "めでたし　めでたし", 120, UIFactory.PaperColor, new Vector2(1000, 220));
+            UIFactory.AddOutline(text, 0.25f);
+            text.alpha = 0;
+            yield return Tween.Run(1.0f, t => text.alpha = t);
+            yield return narration.Say(StoryScript.Medetashi);
+            yield return Tween.Wait(0.6f);
+            yield return Tween.Run(0.8f, t => text.alpha = 1 - t);
+            Destroy(canvas.gameObject);
         }
 
         /// <summary>選択肢で時間切れになったとき（ゲームオーバー）。エンディング数には数えない。</summary>

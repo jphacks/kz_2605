@@ -11,7 +11,7 @@ namespace JPHACKS2026
     {
         public static TMP_FontAsset Font;
 
-        public static readonly Color PanelColor = new(0.12f, 0.09f, 0.07f, 0.88f);
+        public static readonly Color PanelColor = new(0.1f, 0.07f, 0.05f, 0.94f);
         public static readonly Color PaperColor = new(0.98f, 0.94f, 0.85f, 1f);
         public static readonly Color AccentColor = new(0.85f, 0.25f, 0.2f, 1f);
 
@@ -65,6 +65,14 @@ namespace JPHACKS2026
             var rt = (RectTransform)go.transform;
             rt.sizeDelta = boxSize;
             rt.anchoredPosition = anchoredPos;
+            return t;
+        }
+
+        /// <summary>文字に縁取りをつけて、明るい背景や模様の上でも読めるようにする。</summary>
+        public static TextMeshProUGUI AddOutline(TextMeshProUGUI t, float width, Color? color = null)
+        {
+            t.outlineWidth = width;
+            t.outlineColor = color ?? new Color(0.1f, 0.06f, 0.04f, 1f);
             return t;
         }
 
