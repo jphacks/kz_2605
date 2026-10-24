@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
 namespace JPHACKS2026
@@ -8,6 +10,7 @@ namespace JPHACKS2026
     /// <summary>
     /// 視聴者向けの「配信カメラ」。体験者の頭を少し遅れて追いかけ（傾き・細かな揺れを抑えて酔いにくく）、
     /// 一定間隔で低解像度の画像を撮ってJPEGで渡す。普段は描画を止めておき、撮るときだけ1フレーム描画する。
+    /// JPEGへの変換は別スレッドで行い、VRの描画が引っかからないようにする。
     /// </summary>
     public class SpectatorCamera : MonoBehaviour
     {
@@ -75,24 +78,31 @@ namespace JPHACKS2026
             yield return new WaitForEndOfFrame();
             cam.enabled = false;
 
+            byte[] pixels;
             if (SystemInfo.supportsAsyncGPUReadback)
             {
                 var request = AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32);
                 while (!request.done) yield return null;
                 if (request.hasError) { busy = false; yield break; }
-                tex.SetPixelData(request.GetData<byte>(), 0);
-                tex.Apply(false);
+                pixels = request.GetData<byte>().ToArray();
             }
             else
             {
                 var prev = RenderTexture.active;
                 RenderTexture.active = rt;
                 tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0, false);
-                tex.Apply(false);
                 RenderTexture.active = prev;
+                pixels = tex.GetRawTextureData();
             }
-            done(Convert.ToBase64String(tex.EncodeToJPG(quality)));
+
+            // JPEG化とbase64化は重いので別スレッドで（ImageConversion.EncodeArrayToJPG はスレッドセーフ）
+            uint w = (uint)rt.width, h = (uint)rt.height;
+            int q = quality;
+            var task = Task.Run(() => Convert.ToBase64String(
+                ImageConversion.EncodeArrayToJPG(pixels, GraphicsFormat.R8G8B8A8_UNorm, w, h, 0, q)));
+            while (!task.IsCompleted) yield return null;
             busy = false;
+            if (task.Status == TaskStatus.RanToCompletion) done(task.Result);
         }
 
         void OnDestroy()

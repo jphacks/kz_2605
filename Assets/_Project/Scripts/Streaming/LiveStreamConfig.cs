@@ -32,11 +32,11 @@ namespace JPHACKS2026
         }
 
         [Header("VR視点の画像")]
-        [Tooltip("画像を送る間隔（秒）。短くすると滑らかになるが、通信量が増える")]
-        public float frameInterval = 1f;
-        public int frameWidth = 480;
-        public int frameHeight = 270;
-        [Range(10, 90)] public int jpgQuality = 45;
+        [Tooltip("画像を撮る間隔（秒）。短くすると滑らかになるが、通信量が増える。回線が追いつかないときは自動で間引かれる")]
+        public float frameInterval = 0.25f;
+        public int frameWidth = 320;
+        public int frameHeight = 180;
+        [Range(10, 90)] public int jpgQuality = 40;
 
         [Header("受信")]
         [Tooltip("投票・コメント・視聴者数を取りに行く間隔（秒）")]

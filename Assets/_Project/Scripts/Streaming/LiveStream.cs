@@ -34,8 +34,10 @@ namespace JPHACKS2026
 
         // 送る前にためておく変更（キーはルームからのパス。値 null は削除）
         readonly Dictionary<string, object> pending = new();
-        string pendingFrame;
         bool sending;
+        // 画像は字幕などとは別に送る（いちばん新しい1枚だけ。送信中に撮れたものは次に回し、古いものは捨てる）
+        string pendingFrame;
+        bool sendingFrame;
 
         // 視聴者側のデータ（audience）の手元の写し
         readonly Dictionary<string, object> audience = new();
@@ -70,6 +72,7 @@ namespace JPHACKS2026
             Queue("ending", null);
             StartCoroutine(SendLoop());
             StartCoroutine(FrameLoop());
+            StartCoroutine(FrameSendLoop());
             StartCoroutine(rest.Listen("audience", OnAudienceEvent));
         }
 
@@ -133,26 +136,18 @@ namespace JPHACKS2026
             while (true)
             {
                 yield return null;
-                if (sending || (pending.Count == 0 && pendingFrame == null)) continue;
+                if (sending || pending.Count == 0) continue;
 
                 var batch = new Dictionary<string, object>(pending);
                 pending.Clear();
-                if (pendingFrame != null)
-                {
-                    batch["frame"] = new Dictionary<string, object>
-                    {
-                        { "jpg", pendingFrame }, { "w", Config.frameWidth }, { "h", Config.frameHeight }, { "t", Now },
-                    };
-                    pendingFrame = null;
-                }
                 sending = true;
                 yield return rest.Send("PATCH", "", Json.Serialize(batch), code =>
                 {
                     sending = false;
-                    // 通信できなかったときだけ（画像以外を）もう一度送る。サーバーに断られた（4xx）変更は捨てる
+                    // 通信できなかったときだけもう一度送る。サーバーに断られた（4xx）変更は捨てる
                     if (code != 0) return;
                     foreach (var kv in batch)
-                        if (kv.Key != "frame" && !pending.ContainsKey(kv.Key)) Queue(kv.Key, kv.Value);
+                        if (!pending.ContainsKey(kv.Key)) Queue(kv.Key, kv.Value);
                 });
             }
         }
@@ -239,9 +234,25 @@ namespace JPHACKS2026
         {
             while (true)
             {
-                yield return new WaitForSecondsRealtime(Mathf.Max(0.2f, Config.frameInterval));
+                yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, Config.frameInterval));
                 // 送信待ちの画像があれば撮らない（古い画像を溜めない）
                 if (pendingFrame == null) spectator.Capture(jpg => pendingFrame = jpg);
+            }
+        }
+
+        IEnumerator FrameSendLoop()
+        {
+            while (true)
+            {
+                yield return null;
+                if (sendingFrame || pendingFrame == null) continue;
+                string json = Json.Serialize(new Dictionary<string, object>
+                {
+                    { "jpg", pendingFrame }, { "w", Config.frameWidth }, { "h", Config.frameHeight }, { "t", Now },
+                });
+                pendingFrame = null;
+                sendingFrame = true;
+                yield return rest.Send("PUT", "frame", json, _ => sendingFrame = false);
             }
         }
 
