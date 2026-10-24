@@ -881,6 +881,45 @@ namespace JPHACKS2026.Editor
             BuildTurtle("RideTurtle", ride.transform, new Vector3(0, -0.75f, 0.2f), 0, 2.2f, null);
             Point("Seat", ride.transform, Vector3.zero, 0, "sea.seat");
             Point("End", t, new Vector3(0, 0, 40), 0, "sea.end");
+
+            // 進む先に竜宮城：霧の向こうから少しずつ姿を現す（終点の少し奥。入口をこちらに向ける）
+            BuildRyuguExterior(t, new Vector3(0, -3f, 62f), 30f);
+        }
+
+        const string RyuguExteriorModelPath = "Assets/_Project/Art/Models/Environment/Ryugu_Iriguchi.fbx";
+
+        /// <summary>竜宮城の外観（Ryugu_Iriguchi.fbx）を、底面の中心が pos、幅が width になるように置く。</summary>
+        static void BuildRyuguExterior(Transform parent, Vector3 pos, float width)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(RyuguExteriorModelPath);
+            if (model == null)
+            {
+                Debug.LogWarning("[JPHACKS2026] 竜宮城の外観モデルが見つかりません: " + RyuguExteriorModelPath);
+                return;
+            }
+            var inst = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            PrefabUtility.UnpackPrefabInstance(inst, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            inst.name = "RyuguExterior";
+            foreach (var c in inst.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+
+            // 入口（正面の龍柱 hashira*）が手前（-Z）を向くように回す
+            var all = RendererBounds(inst.transform);
+            Bounds? front = null;
+            foreach (var r in inst.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.name.StartsWith("hashira")) continue;
+                if (front is Bounds fb) { fb.Encapsulate(r.bounds); front = fb; }
+                else front = r.bounds;
+            }
+            if (front is Bounds f && f.center.z > all.center.z) inst.transform.rotation = Quaternion.Euler(0, 180, 0) * inst.transform.rotation;
+
+            all = RendererBounds(inst.transform);
+            inst.transform.localScale *= width / Mathf.Max(0.001f, all.size.x);
+            all = RendererBounds(inst.transform);
+            inst.transform.position -= new Vector3(all.center.x, all.min.y, all.center.z);
+
+            inst.transform.SetParent(parent, false);
+            inst.transform.localPosition += pos;
         }
 
         // ── 竜宮城 ───────────────────────────────────
