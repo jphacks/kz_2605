@@ -59,10 +59,13 @@ namespace JPHACKS2026
         /// <summary>
         /// 選択肢を表示し、いずれかの行動が成立するまで待つ。時間切れなら-1。
         /// 台詞の途中で成立した場合は入力を保持し、台詞が終わってから次へ進む（03 機能仕様書）。
+        /// 配信中は視聴者が投票でき、体験者が行動しないまま時間切れになったら投票1位で進む。
         /// </summary>
         IEnumerator Choose(ChoiceDef def, Action<int> result)
         {
+            var live = LiveStream.Instance;
             gm.Choice.Show(def);
+            if (live != null) live.OpenChoice(def);
             foreach (var o in def.options) foreach (var t in o.triggers) if (t != null) t.Arm();
 
             int chosen = -1;
@@ -78,9 +81,23 @@ namespace JPHACKS2026
                 if (chosen >= 0) break;
 
                 gm.Choice.SetRemaining(remaining / def.timeLimit, remaining);
+                if (live != null)
+                {
+                    live.UpdateRemaining(remaining);
+                    gm.Choice.SetVotes(live.Votes, live.TotalVotes);
+                }
                 yield return null;
                 remaining -= Time.deltaTime;
             }
+
+            string decidedBy = chosen >= 0 ? "player" : "timeout";
+            if (chosen < 0 && live != null && live.TopVote() >= 0)
+            {
+                chosen = live.TopVote();
+                decidedBy = "viewers";
+                gm.Choice.ShowDecidedByViewers();
+            }
+            if (live != null) live.CloseChoice(chosen, decidedBy);
 
             foreach (var o in def.options) foreach (var t in o.triggers) if (t != null) t.Disarm();
             if (chosen >= 0)

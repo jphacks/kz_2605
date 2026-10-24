@@ -61,6 +61,8 @@ namespace JPHACKS2026
             Menu = MenuPanel.Create("Menu");
             PauseMenu = MenuPanel.Create("PauseMenu", 50);
             narration.Bind(Subtitle);
+            // 配信（LiveStreamConfig が設定されているときだけ）：Webの視聴ページとつなぎ、コメントを弾幕で流す
+            if (LiveStream.Create(rig.head) is { } live) DanmakuView.Create(live);
             CreateTitleHud();
         }
 
@@ -122,6 +124,11 @@ namespace JPHACKS2026
         IEnumerator StoryFlow(Chapter from, bool skipIntro)
         {
             State = GameState.Story;
+            if (LiveStream.Instance != null)
+            {
+                LiveStream.Instance.ClearEnding();
+                LiveStream.Instance.PublishPhase("story");
+            }
             yield return story.Run(from, skipIntro);
         }
 
@@ -151,6 +158,7 @@ namespace JPHACKS2026
             area.gameObject.SetActive(true);
             CurrentArea = area;
             area.ApplyEnvironment();
+            if (LiveStream.Instance != null) LiveStream.Instance.PublishScene(id);
             rig.TeleportTo(spawn != null ? spawn : area.spawnPoint);
         }
 
@@ -164,6 +172,11 @@ namespace JPHACKS2026
         IEnumerator TitleFlow()
         {
             State = GameState.Title;
+            if (LiveStream.Instance != null)
+            {
+                LiveStream.Instance.ClearEnding();
+                LiveStream.Instance.PublishPhase("title");
+            }
             SwitchArea("title");
             var book = StoryAnchor.Get<Picturebook>("title.book");
             book.SetOpenImmediate(false);
@@ -218,13 +231,15 @@ namespace JPHACKS2026
             UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Title", "おとぎ配信", 150, UIFactory.PaperColor, new Vector2(1300, 220), new Vector2(0, 170)), 0.2f);
             UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Sub", "〜 え！本当に… 絵本の世界へ 〜", 58, new Color(1, 0.88f, 0.6f), new Vector2(1300, 90), new Vector2(0, 75)), 0.15f);
             UIFactory.AddOutline(UIFactory.CreateText(canvas.transform, "Guide", "目の前の絵本に手をのばして\nグリップボタンで開こう", 54, Color.white, new Vector2(1300, 160), new Vector2(0, -90)), 0.15f);
-            hudText = UIFactory.CreateText(canvas.transform, "Count", "", 40, new Color(1, 1, 1, 0.85f), new Vector2(560, 60), new Vector2(330, -270), TextAlignmentOptions.Right);
+            hudText = UIFactory.CreateText(canvas.transform, "Count", "", 40, new Color(1, 1, 1, 0.85f), new Vector2(1240, 110), new Vector2(0, -250));
         }
 
         void ShowHud(bool show)
         {
             hud.SetActive(show);
             hudText.text = $"達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}";
+            if (LiveStream.Instance != null && LiveStream.Instance.Config.ViewerUrl.Length > 0)
+                hudText.text = $"スマホで見る：{LiveStream.Instance.Config.ViewerUrl}\n" + hudText.text;
         }
 
         // ── エンディング後 ───────────────────────────
@@ -233,6 +248,11 @@ namespace JPHACKS2026
         public IEnumerator Owari(EndingId id)
         {
             State = GameState.Menu;
+            if (LiveStream.Instance != null)
+            {
+                LiveStream.Instance.PublishEnding(id);
+                LiveStream.Instance.PublishPhase("ending");
+            }
             narration.Stop();
             if (Fader.Alpha < 0.99f) yield return Fader.FadeOut(1.0f);
             rig.RideAnchor = null;
