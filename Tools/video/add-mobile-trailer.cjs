@@ -6,10 +6,14 @@ const cut=53.4,duration=8,output=p.join(root,'Otogi_Trailer_Mobile.mp4');
 const args=['-i',input];
 for(const name of ['vote','voted','comment','sent'])args.push('-loop','1','-framerate','30','-t','2','-i',p.join(root,'UI','mobile-'+name+'.png'));
 args.push('-i',p.join(edit,'score.wav'));
+args.push('-loop','1','-framerate','30','-i',p.resolve('douwahaisin.png'));
 let filter='';
 for(let i=1;i<=4;i++)filter+=`[${i}:v]setsar=1,format=yuv420p,setpts=PTS-STARTPTS[m${i}];`;
 filter+='[m1][m2][m3][m4]concat=n=4:v=1:a=0[demo];';
-filter+=`[0:v]split=2[head][tail];[head]trim=end=${cut},setpts=PTS-STARTPTS[h];[tail]trim=start=${cut},setpts=PTS-STARTPTS[t];[h][demo][t]concat=n=3:v=1:a=0[v];`;
+// Source concat rounds short montage shots to whole frames, leaving a few
+// room frames beyond the nominal cut. Cover the intended silence explicitly.
+filter+=`[6:v]scale=1680:900:force_original_aspect_ratio=decrease,setsar=1,format=rgba[keylogo];color=c=black:s=1920x1080:r=30:d=5.5[keybg];[keybg][keylogo]overlay=(W-w)/2:(H-h)/2:shortest=1,format=yuv420p,trim=duration=5.5,setpts=PTS-STARTPTS,fade=t=in:d=0.2,fade=t=out:st=5.3:d=0.2,setpts=PTS+0.533333333/TB[key];`;
+filter+=`[0:v]split=2[head][tail];[head]trim=end=${cut},setpts=PTS-STARTPTS[h];[tail]trim=start=${cut},setpts=PTS-STARTPTS,drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='lt(t,6.033333333)'[tailbase];[tailbase][key]overlay=eof_action=pass:enable='gte(t,0.533333333)*lt(t,6.033333333)'[t];[h][demo][t]concat=n=3:v=1:a=0[v];`;
 filter+=`[0:a]asplit=2[ah][at];[ah]atrim=end=${cut},asetpts=PTS-STARTPTS[ahead];[at]atrim=start=${cut},asetpts=PTS-STARTPTS[atail];`;
 filter+='[5:a]atrim=start=6:end=14,asetpts=PTS-STARTPTS,volume=0.55,afade=t=in:d=0.25,afade=t=out:st=7.5:d=0.5,pan=stereo|c0=c0|c1=c0[bed];[ahead][bed][atail]concat=n=3:v=0:a=1[a]';
 args.push('-filter_complex',filter,'-map','[v]','-map','[a]','-c:v','libx264','-preset','fast','-crf','18','-pix_fmt','yuv420p','-r','30','-c:a','aac','-b:a','192k','-ar','48000','-ac','2','-movflags','+faststart',output);ff(args);
