@@ -42,7 +42,7 @@ Quest（Unity）──REST──▶ Firebase Realtime Database ◀──JS SDK�
 - VR はセリフを読み始めるたびに `lines/` へ1行ずつ書きます（id・話し手・本文・長さ）。視聴ページはそれを字幕に出します。
   上書きの字幕（`state/subtitle`）と違い、回線が遅くても短いセリフが抜けません。
 - 音声は視聴ページに組み込んであり（`public/voice/{id}.mp3`）、受け取った id の音声を再生します。
-  スマホは操作のあとでないと音を出せないので、右上の「🔊 音声」ボタンでオンにします。
+  スマホは操作のあとでないと音を出せないので、右上の「🔊 音声をオンにする」ボタンを押します。
 - VR の音声（`Assets/_Project/Audio/Voice/Resources/Narration/*.wav`）を作り直したら、MP3 も作り直してから公開します。
 
   ```powershell

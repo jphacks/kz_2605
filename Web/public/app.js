@@ -164,11 +164,18 @@ let lineTimer = null;
 let soundOn = false;
 let voice = null;
 
-onChildAdded(query(roomRef("lines"), limitToLast(1)), (snap) => showLine(snap.val()));
+// 最初に届く1行はページを開いたときに残っていた行（読み終わっているかもしれない）。
+// VR の時計はずれていることがあるので、時刻で古さを判定するのはこの行だけにする（後から届いた行は必ず出して流す）
+let firstLine = true;
+onChildAdded(query(roomRef("lines"), limitToLast(1)), (snap) => {
+  const leftover = firstLine;
+  firstLine = false;
+  showLine(snap.val(), leftover);
+});
 
-function showLine(line) {
+function showLine(line, leftover) {
   if (!line || !line.text) return;
-  const age = Math.max(0, serverNow() - (line.t || 0));
+  const age = leftover ? Math.max(0, serverNow() - (line.t || 0)) : 0;
   const dur = (line.dur || 2) * 1000;
   if (age > dur + 3000) return;   // ページを開く前に読み終わっていたセリフは出さない
   linesSeen = true;
@@ -184,7 +191,8 @@ function playVoice(line) {
   voice ||= new Audio();
   voice.pause();
   voice.src = `voice/${encodeURIComponent(line.id)}.mp3`;
-  voice.play().catch(() => { /* 音声ファイルが無い・再生できないときは字幕だけ */ });
+  // 音声ファイルが無い・再生できないときは字幕だけ（原因を追えるようにコンソールには出す）
+  voice.play().catch((e) => console.warn("[voice]", line.id, e.name, e.message));
 }
 
 // 無音の短い WAV（タップしたときに一度鳴らして、以降の再生を許可してもらう）
@@ -201,7 +209,7 @@ $("sound-button").addEventListener("click", () => {
   soundOn = !soundOn;
   const button = $("sound-button");
   button.setAttribute("aria-pressed", String(soundOn));
-  button.textContent = soundOn ? "🔊 音声オン" : "🔇 音声オフ";
+  button.textContent = soundOn ? "🔇 音声をオフにする" : "🔊 音声をオンにする";
   voice ||= new Audio();
   if (!soundOn) { voice.pause(); return; }
   // タップの中で一度再生しておく（スマホは操作のあとでないと音を出せない）。読み上げ中ならそのセリフを流す
