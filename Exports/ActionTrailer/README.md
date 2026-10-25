@@ -1,5 +1,11 @@
 # 童話配信：アクション予告編
 
+[スマホの投票・コメント紹介を追加した最新版](Otogi_Trailer_Mobile.mp4)
+
+約69秒。53.4秒から8秒間、スマホのブラウザで参加できること、選択肢への投票、コメントがVR空間にも届くことを紹介。既存ゲーム映像と新規作成の機能紹介用デモ画面を使用し、外部素材は使用していません。元の予告編は保存しています。
+
+再生成：`Invoke-Expression (Get-Content Tools/video/mobile-ui.ps1 -Raw -Encoding UTF8)` の後、`node Tools/video/add-mobile-trailer.cjs`。編集区間は `mobile-timeline.json` に保存。
+
 [完成動画](Otogi_Action_Trailer.mp4)
 
 [新しい姫モデルを反映した更新版](Otogi_Action_Trailer_Princess.mp4)
