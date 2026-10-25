@@ -34,12 +34,16 @@ let serverOffset = 0;   // 端末の時計とサーバーの時計の差
 const serverNow = () => Date.now() + serverOffset;
 onValue(ref(db, ".info/serverTimeOffset"), (snap) => { serverOffset = snap.val() || 0; });
 
+// Firebase は手元に残っている値があると、このファイルを読み込んでいる途中でも通知してくる。
+// 描画はファイルの読み込みが終わってから行う（後ろで宣言している変数をまだ使えないため）
+const afterLoad = (fn) => queueMicrotask(fn);
+
 // 視聴者数：つながっている間だけ audience/viewers に自分を書き、切断で自動的に消える
 let disconnectedSince = Date.now();
 onValue(ref(db, ".info/connected"), (snap) => {
   connected = !!snap.val();
   if (!connected) disconnectedSince = Date.now();
-  updateLive();
+  afterLoad(updateLive);
   if (!connected) return;
   const me = roomRef(`audience/viewers/${viewerId}`);
   onDisconnect(me).remove().then(() => set(me, serverTimestamp()));
@@ -49,7 +53,7 @@ for (const [key, path] of [["viewers", "audience/viewers"], ["frame", "frame"], 
   onValue(roomRef(path), (snap) => {
     data[key] = snap.val();
     if (key === "choice") watchVotes();
-    render(key);
+    afterLoad(() => render(key));
   });
 }
 

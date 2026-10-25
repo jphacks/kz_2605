@@ -59,7 +59,7 @@ function fixture() {
     set: async (p, v) => writes.push({ path: p, value: v }),
     push: async (p, v) => writes.push({ path: p, value: v }),
     serverTimestamp: () => 12345, onDisconnect: () => ({ remove: async () => {} }),
-    setInterval() {}, setTimeout: () => 0, clearTimeout() {}, btoa: s => Buffer.from(s, 'binary').toString('base64'),
+    setInterval() {}, setTimeout: () => 0, clearTimeout() {}, queueMicrotask: fn => fn(), btoa: s => Buffer.from(s, 'binary').toString('base64'),
     Audio: class { constructor() { this.src = ''; f.played.push(this); } play() { this.playing = this.src; return Promise.resolve(); } pause() { this.playing = null; } },
     DATABASE_URL: '', DEFAULT_ROOM: 'test', console,
   });
