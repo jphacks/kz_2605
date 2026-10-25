@@ -224,7 +224,7 @@ namespace JPHACKS2026
             // 海の光が亀に集まり、その力で大きくなる。説明のナレーションの間じゅう、見上げながらゆっくり伸ばす
             Motes(turtle.position + Vector3.up, new Color(.35f,.75f,.85f), 1.2f, .9f, 140);
             var scale=turtle.localScale;
-            var grow=gm.StartCoroutine(Tween.Run(6f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
+            var grow=gm.StartCoroutine(Tween.Run(4.8f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
             yield return Say(StoryScript.Ed2b[1]);
             yield return grow;
             // Limit the lunge using the enlarged mesh bounds, then cut to deep sea.

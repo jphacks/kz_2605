@@ -58,7 +58,8 @@ namespace JPHACKS2026
             Fader = ScreenFader.Create(rig.head);
             Subtitle = SubtitleView.Create();
             Choice = ChoicePanel.Create();
-            Menu = MenuPanel.Create("Menu");
+            // 結果のメニュー（おわり）は、暗転・白転で終わるエンディングでも見えるよう暗幕（ScreenFader：100）より手前に描く
+            Menu = MenuPanel.Create("Menu", 105);
             // ポーズメニューは暗幕（ScreenFader：100）より手前に描く。暗転中にポーズしても見えて、操作できるように
             PauseMenu = MenuPanel.Create("PauseMenu", 110);
             narration.Bind(Subtitle);
