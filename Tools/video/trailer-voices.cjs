@@ -1,0 +1,6 @@
+const fs=require('fs'),path=require('path');
+const out=path.resolve('Exports/Trailer/Voice');fs.mkdirSync(out,{recursive:true});
+const lines=[['intro','もし、絵本の世界に入れたら。',.92],['question','本当に、カメを助けたのでしょうか？',.91],['endings','ひとつの選択が、九つの結末へ。',.98],['final','次の物語を選ぶのは、あなたです。',.94]];
+(async()=>{const speakers=await(await fetch('http://127.0.0.1:50021/speakers')).json();const sp=speakers.find(s=>s.name==='栗田まろん');if(!sp)throw Error('栗田まろん unavailable');const id=sp.styles.find(s=>s.name==='ノーマル').id;
+for(const [name,text,speed]of lines){const q=await(await fetch('http://127.0.0.1:50021/audio_query?'+new URLSearchParams({text,speaker:id}),{method:'POST'})).json();Object.assign(q,{speedScale:speed,outputSamplingRate:48000,outputStereo:false,prePhonemeLength:.15,postPhonemeLength:.25});const r=await fetch('http://127.0.0.1:50021/synthesis?speaker='+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(q)});if(!r.ok)throw Error(await r.text());fs.writeFileSync(path.join(out,name+'.wav'),Buffer.from(await r.arrayBuffer()));console.log(name,text);}
+fs.writeFileSync(path.join(out,'credits.json'),JSON.stringify({engine:'VOICEVOX',speaker:'栗田まろん',style:'ノーマル',lines},null,2));})();

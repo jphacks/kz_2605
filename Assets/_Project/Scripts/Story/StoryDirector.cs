@@ -29,26 +29,35 @@ namespace JPHACKS2026
         IEnumerator Say(params Line[] lines) => narration.Say(lines);
 
         bool skipNextIntro;
+        Line? choiceLeadIn;   // 導入の最後のセリフ。次の選択肢を出すのと同時に読む
 
         const int IntroLinesOnSkip = 2;
 
-        /// <summary>章の導入ナレーション。選択肢から始める（チャプター選択・直前の選択肢に戻る）直後の1回だけは、最後の2つのセリフだけ流して選択肢へ進む。</summary>
+        /// <summary>
+        /// 章の導入ナレーション。最後のセリフは読まずに残し、次の Choose で選択肢を出すのと同時に読む。
+        /// 選択肢から始める（チャプター選択・直前の選択肢に戻る）直後の1回だけは、最後の2つのセリフだけ使う。
+        /// </summary>
         IEnumerator Intro(Line[] lines)
         {
             if (skipNextIntro)
             {
-                // 選択肢から始めるときも、いきなり選択肢を出さずに直前の2つのセリフで状況を思い出させる
+                // 選択肢から始めるときも、いきなり選択肢を出さずに直前のセリフで状況を思い出させる
                 skipNextIntro = false;
                 yield return Tween.Wait(0.5f);
-                yield return Say(lines[Mathf.Max(0, lines.Length - IntroLinesOnSkip)..]);
-                yield break;
+                lines = lines[Mathf.Max(0, lines.Length - IntroLinesOnSkip)..];
             }
-            yield return Say(lines);
+            if (lines.Length == 0) yield break;
+            yield return Say(lines[..^1]);
+            choiceLeadIn = lines[^1];
         }
+
+        /// <summary>このセリフを、次の Choose で選択肢を出すのと同時に読む（エンディング中の選択肢用）。</summary>
+        public void LeadInNextChoice(Line line) => choiceLeadIn = line;
 
         public IEnumerator Run(Chapter from, bool skipIntro = false)
         {
             skipNextIntro = skipIntro;
+            choiceLeadIn = null;
             switch (from)
             {
                 case Chapter.Beach: yield return Beach(); break;
@@ -71,11 +80,18 @@ namespace JPHACKS2026
         /// 選択肢を表示し、いずれかの行動が成立するまで待つ。時間切れなら-1。
         /// 台詞の途中で成立した場合は入力を保持し、台詞が終わってから次へ進む（03 機能仕様書）。
         /// 配信中は視聴者が投票でき、体験者が行動しないまま時間切れになったら投票1位で進む。
+        /// 導入の最後のセリフは選択肢と同時に読み、読み終わるまでは制限時間を減らさない。
         /// </summary>
         public IEnumerator Choose(ChoiceDef def, Action<int> result)
         {
             var live = LiveStream.Instance;
             gm.Choice.Show(def);
+            bool leadIn = choiceLeadIn != null;
+            if (leadIn)
+            {
+                gm.StartCoroutine(Say(choiceLeadIn.Value));
+                choiceLeadIn = null;
+            }
             // 視聴者の投票は短めに締め切る（投票があればそこで決まる）。無ければ体験者の制限時間いっぱいまで延ばす
             float viewerTime = def.timeLimit * viewerTimeRatio;
             bool viewerTimeOver = false;
@@ -109,6 +125,8 @@ namespace JPHACKS2026
                     gm.Choice.SetVotes(live.Votes, live.TotalVotes);
                 }
                 yield return null;
+                if (leadIn && narration.IsSpeaking) continue;
+                leadIn = false;
                 remaining -= Time.deltaTime;
             }
 

@@ -1,0 +1,112 @@
+[
+  {
+    "name": "01-room",
+    "start": 0,
+    "duration": 7
+  },
+  {
+    "name": "02-beach",
+    "start": 7,
+    "duration": 4
+  },
+  {
+    "name": "03-sea",
+    "start": 11,
+    "duration": 4
+  },
+  {
+    "name": "04-palace",
+    "start": 15,
+    "duration": 4
+  },
+  {
+    "name": "05-village",
+    "start": 19,
+    "duration": 2
+  },
+  {
+    "name": "06-smoke",
+    "start": 21,
+    "duration": 7
+  },
+  {
+    "name": "07-medetashi",
+    "start": 28,
+    "duration": 3.5
+  },
+  {
+    "name": "08-pause",
+    "start": 31.5,
+    "duration": 2.5
+  },
+  {
+    "name": "09-rewind",
+    "start": 34,
+    "duration": 4
+  },
+  {
+    "name": "10-bully",
+    "start": 38,
+    "duration": 5
+  },
+  {
+    "name": "11-question",
+    "start": 43,
+    "duration": 5
+  },
+  {
+    "name": "12-nine",
+    "start": 48,
+    "duration": 3.5
+  },
+  {
+    "name": "ed1",
+    "start": 51.5,
+    "duration": 3.5
+  },
+  {
+    "name": "ed2",
+    "start": 55,
+    "duration": 3.5
+  },
+  {
+    "name": "ed3",
+    "start": 58.5,
+    "duration": 3.5
+  },
+  {
+    "name": "ed4",
+    "start": 62,
+    "duration": 3.5
+  },
+  {
+    "name": "ed5",
+    "start": 65.5,
+    "duration": 3.5
+  },
+  {
+    "name": "ed6",
+    "start": 69,
+    "duration": 3.5
+  },
+  {
+    "name": "ed7",
+    "start": 72.5,
+    "duration": 3.5
+  },
+  {
+    "name": "ed8",
+    "start": 76,
+    "duration": 3.5
+  },
+  {
+    "name": "ed9",
+    "start": 79.5,
+    "duration": 3.5
+  },
+  {
+    "name": "final",
+    "start": 83,
+    "duration": 7
+  }
+]

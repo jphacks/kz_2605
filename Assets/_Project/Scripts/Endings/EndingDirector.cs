@@ -217,7 +217,7 @@ namespace JPHACKS2026
             // 海の光が亀に集まり、その力で大きくなる。説明のナレーションの間じゅう、見上げながらゆっくり伸ばす
             Motes(turtle.position + Vector3.up, new Color(.35f,.75f,.85f), 1.2f, .9f, 140);
             var scale=turtle.localScale;
-            var grow=gm.StartCoroutine(Tween.Run(6f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
+            var grow=gm.StartCoroutine(Tween.Run(4.8f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
             yield return Say(StoryScript.Ed2b[1]);
             yield return grow;
             // Limit the lunge using the enlarged mesh bounds, then cut to deep sea.
@@ -298,7 +298,7 @@ namespace JPHACKS2026
             gm.StartCoroutine(Tween.Environment(new Color(.01f,.025f,.035f),new Color(.07f,.10f,.12f),
                 new Color(.32f,.48f,.50f),.22f,new Color(.02f,.05f,.06f),.065f,2f));
             yield return EmergeOtohime(true);
-            yield return Say(StoryScript.Ed4Scroll[2]);
+            gm.story.LeadInNextChoice(StoryScript.Ed4Scroll[2]);
 
             int escapeChoice=-1;
             yield return gm.story.Choose(new ChoiceDef
