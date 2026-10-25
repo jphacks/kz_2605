@@ -166,7 +166,14 @@ namespace JPHACKS2026
         {
             var turtle = A<SimpleCharacter>("beach.turtle");
             turtle.lookAtPlayer = true;
-            yield return Say(StoryScript.Ed1[0], StoryScript.Ed1[1]);
+            gm.Rig.LocomotionEnabled = false;
+            // 見過ごすと亀に背を向けて離れているので、語りの間に暗転して、歩いていった側から亀が見える位置へ移す
+            var away = gm.Rig.Head.position - turtle.transform.position; away.y = 0;
+            if (away.sqrMagnitude < .01f) away = -turtle.transform.parent.forward;
+            var talk = gm.StartCoroutine(Say(StoryScript.Ed1[0]));
+            yield return Reframe(turtle.transform.position + away.normalized * 3.2f, turtle.transform.position + Vector3.up * .4f);
+            yield return talk;
+            yield return Say(StoryScript.Ed1[1]);
             // A hopeful glance, then a slow, defeated bow.
             yield return Bow(turtle, 26f);
             turtle.idle = SimpleCharacter.Idle.None;
