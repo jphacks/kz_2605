@@ -6,6 +6,7 @@ namespace JPHACKS2026
     /// <summary>
     /// 手のモデル（Resources/Hands/Hand_L・Hand_R、指の骨つき）を仮のミトンと置き換え、コントローラーを握った形に指を曲げる。
     /// 人差し指はトリガー、ほかの指は握り具合に合わせて曲がり、物を持っている間はすべて握る。
+    /// 老いた手（Hands/HandOld_L・HandOld_R、同じ骨）があれば、玉手箱を開けた後（SetAged）にそちらへ切り替える。
     /// モデルの軸の向きは取り込み設定に左右されるので、骨の位置から「指先の向き・人差し指側・手のひら」を求めて合わせる。
     /// </summary>
     public class HandVisual : MonoBehaviour
@@ -28,6 +29,8 @@ namespace JPHACKS2026
         HandGrabber grabber;
         readonly List<Bone>[] bones = new List<Bone>[Fingers.Length];
         readonly float[] curl = new float[Fingers.Length];
+        Renderer[] youngRenderers = new Renderer[0];
+        Renderer[] oldRenderers = new Renderer[0];
 
         /// <summary>モデルがあれば付けて true。無ければ仮のミトンのまま。</summary>
         public static bool TryAttach(Hand hand)
@@ -68,6 +71,7 @@ namespace JPHACKS2026
 
             // 色は肌の色・老いた色の切り替え（Hand.SetAged）に合わせて URP の素材にする
             var skin = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "Hand skin" };
+            skin.SetColor("_BaseColor", hand.skinColor);
             skin.SetFloat("_Smoothness", 0.25f);
             foreach (var r in renderers)
             {
@@ -80,7 +84,59 @@ namespace JPHACKS2026
             hand.skinRenderers = renderers;
 
             var visual = hand.gameObject.AddComponent<HandVisual>();
+            visual.youngRenderers = renderers;
+            visual.oldRenderers = AttachOldHand(model.transform, byName, suffix);
             visual.Bind(hand, byName, suffix, tr.TransformDirection(palmNormal));
+            return true;
+        }
+
+        /// <summary>老いた手を、今の手と同じ位置に置き、今の手の骨で動くようにする（指の曲げも共通になる）。</summary>
+        static Renderer[] AttachOldHand(Transform young, Dictionary<string, Transform> bones, string suffix)
+        {
+            var prefab = Resources.Load<GameObject>("Hands/HandOld_" + suffix);
+            if (prefab == null) return new Renderer[0];
+            var old = Instantiate(prefab, young.parent, false);
+            old.name = "Old hand model";
+            old.transform.SetLocalPositionAndRotation(young.localPosition, young.localRotation);
+            old.transform.localScale = young.localScale;
+            var list = new List<Renderer>();
+            foreach (var smr in old.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                var mapped = new Transform[smr.bones.Length];
+                for (int i = 0; i < mapped.Length; i++)
+                    mapped[i] = smr.bones[i] != null && bones.TryGetValue(smr.bones[i].name, out var b) ? b : null;
+                if (System.Array.IndexOf(mapped, null) >= 0) { Debug.LogWarning("[HandVisual] 老いた手の骨が今の手と合いません: HandOld_" + suffix); Destroy(old); return new Renderer[0]; }
+                if (smr.rootBone != null && bones.TryGetValue(smr.rootBone.name, out var root)) smr.rootBone = root;
+                // 老いた手のファイルは骨の基準の座標が今の手と違うので、今の手の骨（まだ曲げていない姿勢）に合わせて
+                // バインドポーズを作り直す。こうすると、曲げていないときは置いた位置の形のまま表示される
+                var mesh = Instantiate(smr.sharedMesh);
+                var bind = new Matrix4x4[mapped.Length];
+                for (int i = 0; i < mapped.Length; i++) bind[i] = mapped[i].worldToLocalMatrix * smr.transform.localToWorldMatrix;
+                mesh.bindposes = bind;
+                smr.sharedMesh = mesh;
+                smr.bones = mapped;
+                smr.updateWhenOffscreen = true;
+                // 老いた手の色はモデルの素材の色を使う
+                var color = smr.sharedMaterial != null ? smr.sharedMaterial.color : new Color(0.78f, 0.74f, 0.70f);
+                var mat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "Old hand skin" };
+                mat.SetColor("_BaseColor", color);
+                mat.SetFloat("_Smoothness", 0.2f);
+                smr.sharedMaterial = mat;
+                smr.enabled = false;
+                list.Add(smr);
+            }
+            // 骨は今の手のものを使うので、老いた手のモデルが持ってきた骨は消す
+            foreach (Transform child in old.transform)
+                if (child.GetComponent<SkinnedMeshRenderer>() == null) Destroy(child.gameObject);
+            return list.ToArray();
+        }
+
+        /// <summary>老いた手に切り替える（無ければ false を返し、Hand が色だけ変える）。</summary>
+        public bool SetAged(bool aged)
+        {
+            if (oldRenderers.Length == 0) return false;
+            foreach (var r in youngRenderers) if (r != null) r.enabled = !aged;
+            foreach (var r in oldRenderers) if (r != null) r.enabled = aged;
             return true;
         }
 

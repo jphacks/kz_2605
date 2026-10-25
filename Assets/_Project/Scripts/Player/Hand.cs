@@ -64,6 +64,9 @@ namespace JPHACKS2026
 
         public void SetAged(bool aged)
         {
+            // 老いた手のモデルがあれば差し替える。無ければ肌の色だけ変える
+            var visual = GetComponent<HandVisual>();
+            if (visual != null && visual.SetAged(aged)) return;
             foreach (var r in skinRenderers)
                 if (r != null) r.material.SetColor("_BaseColor", aged ? agedColor : skinColor);
         }

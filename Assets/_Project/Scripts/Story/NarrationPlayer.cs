@@ -47,6 +47,7 @@ namespace JPHACKS2026
             {
                 duration = Mathf.Max(minDuration, 0.6f + line.text.Length * secondsPerChar);
             }
+            if (LiveStream.Instance != null) LiveStream.Instance.PublishLine(line, duration);
 
             float t = 0;
             while (t < duration)

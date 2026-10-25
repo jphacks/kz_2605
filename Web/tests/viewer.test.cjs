@@ -38,6 +38,7 @@ class Element {
 }
 
 function fixture() {
+  const f = { played: [] };
   const elements = new Map();
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   get('choice-timebar').append(new Element());
@@ -54,18 +55,22 @@ function fixture() {
     document, window: {}, location: { search: '', href: 'http://localhost/' }, URLSearchParams,
     localStorage: { getItem() { return null; }, setItem() {} },
     initializeApp: () => ({}), getDatabase: () => ({}), ref: (_, p) => p,
-    onValue: (p, handler) => { listeners[p] = handler; }, onChildAdded() {}, off() {}, query: p => p, limitToLast() {},
+    onValue: (p, handler) => { listeners[p] = handler; }, onChildAdded: (p, handler) => { listeners['child:' + p] = handler; }, off() {}, query: p => p, limitToLast() {},
     set: async (p, v) => writes.push({ path: p, value: v }),
     push: async (p, v) => writes.push({ path: p, value: v }),
     serverTimestamp: () => 12345, onDisconnect: () => ({ remove: async () => {} }),
-    setInterval() {}, DATABASE_URL: '', DEFAULT_ROOM: 'test', console,
+    setInterval() {}, setTimeout: () => 0, clearTimeout() {}, btoa: s => Buffer.from(s, 'binary').toString('base64'),
+    Audio: class { constructor() { this.src = ''; f.played.push(this); } play() { this.playing = this.src; return Promise.resolve(); } pause() { this.playing = null; } },
+    DATABASE_URL: '', DEFAULT_ROOM: 'test', console,
   });
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8')
     .replace(/^import[\s\S]*?from\s+"[^"]+";\s*/gm, '');
   vm.runInContext(source + '\nglobalThis.api={data,renderChoice,castVote,renderEnding,updateLive};', context);
   // Firebase から値が届いたことにする（.info/connected やルームの各パス）
   const emit = (p, value) => listeners[p]({ val: () => value });
-  return { get, ratings, writes, api: context.api, document, emit };
+  f.emit = emit;
+  f.get = get; f.ratings = ratings; f.writes = writes; f.api = context.api; f.document = document;
+  return f;
 }
 
 test('Voting remains visible without scrolling, and timer updates keep the same buttons', async () => {
@@ -156,4 +161,26 @@ test('While waiting for the stream, viewers are invited to comment and can send 
   // 配信が始まれば、ひとことボタンは消える
   f.emit('rooms/test/frame', { jpg: 'y', t: Date.now() });
   assert.equal(f.get('waiting-chips').hidden, true);
+});
+
+test('Each line from VR is shown as a subtitle and, with sound on, plays the same voice', async () => {
+  const f = fixture();
+  f.emit('.info/connected', true);
+  const line = (id, speaker, text) => ({ id, speaker, text, dur: 2, t: Date.now() });
+  f.emit('child:rooms/test/lines', line('ed2_03', '亀', '……よくも。'));
+  const sub = f.get('subtitle');
+  assert.equal(sub.children[0].textContent, '亀');
+  assert.equal(sub.children[1], '「……よくも。」');
+  assert.equal(f.played.length, 0, '音声オフのあいだは再生しない');
+
+  await f.get('sound-button').fire('click');
+  assert.equal(f.get('sound-button').attributes['aria-pressed'], 'true');
+  assert.equal(f.played[0].playing, 'voice/ed2_03.mp3', 'オンにした時点で読み上げ中のセリフを流す');
+  f.emit('child:rooms/test/lines', line('ed2_06', '', 'この亀は、竜宮城の使い。'));
+  assert.equal(f.played[0].playing, 'voice/ed2_06.mp3');
+  assert.equal(sub.children[0], 'この亀は、竜宮城の使い。');
+
+  // ページを開く前に読み終わっていた古いセリフは出さない
+  f.emit('child:rooms/test/lines', { id: 'story_001', speaker: '', text: 'むかしむかし', dur: 2, t: Date.now() - 60000 });
+  assert.equal(sub.children[0], 'この亀は、竜宮城の使い。');
 });

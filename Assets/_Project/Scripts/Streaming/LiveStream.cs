@@ -73,6 +73,7 @@ namespace JPHACKS2026
             // 前回の配信の選択肢・エンディングが残っていたら消す（投票は選択肢ごとのIDで分かれるので残してよい）
             Queue("choice", null);
             Queue("ending", null);
+            Queue("lines", null);   // 前回の配信のセリフ
             StartCoroutine(SendLoop());
             StartCoroutine(FrameLoop());
             StartCoroutine(FrameSendLoop());
@@ -167,6 +168,24 @@ namespace JPHACKS2026
             Queue("state/area", areaId);
             Queue("state/areaName", name ?? areaId);
             Queue("state/t", Now);
+        }
+
+        int lineSeq;
+        readonly long session = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();   // 行の名前の頭。前回の配信の行より必ず後ろに並ぶ
+
+        /// <summary>
+        /// 読み始めたセリフを1行ずつ送る（視聴ページが字幕に出し、同じ音声を再生する）。
+        /// 字幕（state/subtitle）は上書きなので、回線が遅いと短いセリフが送る前に次で上書きされて抜けることがある。
+        /// こちらは行ごとに別の場所へ書くので、まとめて送っても1行も抜けない。
+        /// </summary>
+        public void PublishLine(Line line, float duration)
+        {
+            lineSeq++;
+            Queue($"lines/{session}-{lineSeq:D5}", new Dictionary<string, object>
+            {
+                { "id", line.id ?? "" }, { "speaker", line.speaker ?? "" }, { "text", line.text ?? "" },
+                { "dur", Mathf.Round(duration * 100) / 100f }, { "t", Now },
+            });
         }
 
         /// <summary>字幕。text が null なら字幕を消す。</summary>

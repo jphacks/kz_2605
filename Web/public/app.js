@@ -148,16 +148,76 @@ setInterval(updateLive, 1000);
 function renderState() {
   const s = data.state || {};
   $("area-name").textContent = s.areaName || "";
+  renderSubtitle();
+}
+
+// ── セリフ（字幕と音声） ─────────────────────
+// VR が読み始めたセリフを1行ずつ受け取る（rooms/{room}/lines）。上書きの字幕（state.subtitle）と違い、
+// 回線が遅くても短いセリフが抜けないので、届いていればこちらを字幕に使い、音声がオンなら VR と同じ音声を流す
+let currentLine = null;
+let linesSeen = false;      // この VR はセリフを1行ずつ送ってくる（古いビルドなら state.subtitle を使う）
+let lineTimer = null;
+let soundOn = false;
+let voice = null;
+
+onChildAdded(query(roomRef("lines"), limitToLast(1)), (snap) => showLine(snap.val()));
+
+function showLine(line) {
+  if (!line || !line.text) return;
+  const age = Math.max(0, serverNow() - (line.t || 0));
+  const dur = (line.dur || 2) * 1000;
+  if (age > dur + 3000) return;   // ページを開く前に読み終わっていたセリフは出さない
+  linesSeen = true;
+  currentLine = line;
+  clearTimeout(lineTimer);
+  lineTimer = setTimeout(() => { if (currentLine === line) { currentLine = null; renderSubtitle(); } }, Math.max(800, dur - age) + 300);
+  renderSubtitle();
+  playVoice(line);
+}
+
+function playVoice(line) {
+  if (!soundOn || !line.id) return;
+  voice ||= new Audio();
+  voice.pause();
+  voice.src = `voice/${encodeURIComponent(line.id)}.mp3`;
+  voice.play().catch(() => { /* 音声ファイルが無い・再生できないときは字幕だけ */ });
+}
+
+// 無音の短い WAV（タップしたときに一度鳴らして、以降の再生を許可してもらう）
+function silentWav() {
+  const n = 800, bytes = new Uint8Array(44 + n * 2), v = new DataView(bytes.buffer);
+  const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 16000, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 2, true);
+  return "data:audio/wav;base64," + btoa(String.fromCharCode(...bytes));
+}
+
+$("sound-button").addEventListener("click", () => {
+  soundOn = !soundOn;
+  const button = $("sound-button");
+  button.setAttribute("aria-pressed", String(soundOn));
+  button.textContent = soundOn ? "🔊 音声オン" : "🔇 音声オフ";
+  voice ||= new Audio();
+  if (!soundOn) { voice.pause(); return; }
+  // タップの中で一度再生しておく（スマホは操作のあとでないと音を出せない）。読み上げ中ならそのセリフを流す
+  if (currentLine && currentLine.id) playVoice(currentLine);
+  else { voice.src = silentWav(); voice.play().catch(() => {}); }
+});
+
+function renderSubtitle() {
+  const s = data.state || {};
+  const line = currentLine || (!linesSeen && s.subtitle && s.subtitle.text ? s.subtitle : null);
   const sub = $("subtitle");
   sub.replaceChildren();
-  if (s.subtitle && s.subtitle.text) {
-    if (s.subtitle.speaker) {
+  if (line) {
+    if (line.speaker) {
       const sp = document.createElement("span");
       sp.className = "speaker";
-      sp.textContent = s.subtitle.speaker;
-      sub.append(sp, `「${s.subtitle.text}」`);
+      sp.textContent = line.speaker;
+      sub.append(sp, `「${line.text}」`);
     } else {
-      sub.append(s.subtitle.text);
+      sub.append(line.text);
     }
   } else {
     const idle = document.createElement("span");

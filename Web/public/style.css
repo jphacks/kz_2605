@@ -68,6 +68,13 @@ body {
   padding: 6px 12px; border-radius: 999px; border: 2px solid rgba(247, 239, 220, 0.5);
   background: transparent; color: var(--on-bg); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
 }
+/* 音声：スマホでは自動で音を出せないので、タップしてオンにする */
+.sound-button {
+  padding: 6px 12px; border-radius: 999px; border: 2px solid rgba(247, 239, 220, 0.5);
+  background: transparent; color: var(--on-bg); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  touch-action: manipulation;
+}
+.sound-button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: var(--ink); }
 .share {
   display: flex; gap: 16px; align-items: center;
   max-width: 1400px; margin: 0 auto 16px; padding: 14px 24px;
