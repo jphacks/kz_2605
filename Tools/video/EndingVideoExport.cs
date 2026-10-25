@@ -15,10 +15,6 @@ using JPHACKS2026;
     public static void Run()
     {
         EditorSceneManager.OpenScene("Assets/_Project/Scenes/Main.unity");
-        /*EditorApplication.playModeStateChanged += s => {
-            if (s == PlayModeStateChange.EnteredPlayMode)
-                new GameObject("Ending video export").AddComponent<EndingVideoRunner>();
-        };*/
         EditorApplication.isPlaying = true;
     }
 }
@@ -47,9 +43,17 @@ public class EndingVideoRunner : MonoBehaviour
         AudioRenderer.Start();
         target = new RenderTexture(Width,Height,24);
         pixels = new Texture2D(Width,Height,TextureFormat.RGB24,false);
-        for(current=1; current<=9; current++)
+        int first = 1, last = 9;
+        int endingArgument = Array.IndexOf(args, "-endingId");
+        if (endingArgument >= 0)
         {
-            if(current>1) { SceneManager.LoadScene("Main"); yield return null; }
+            if (endingArgument + 1 >= args.Length || !int.TryParse(args[endingArgument + 1], out first) || first < 1 || first > 9)
+                throw new ArgumentException("-endingId must be between 1 and 9.");
+            last = first;
+        }
+        for(current=first; current<=last; current++)
+        {
+            if(current>first) { SceneManager.LoadScene("Main"); yield return null; }
             yield return null;
             var gm=GameManager.Instance;
             gm.StopAllCoroutines();
@@ -82,7 +86,7 @@ public class EndingVideoRunner : MonoBehaviour
             File.AppendAllText(Path.Combine(output,"progress.txt"),$"ED{current}: {frames} frames, {frames/(float)Fps:F2}s\n");
         }
         AudioRenderer.Stop();
-        File.WriteAllText(Path.Combine(output,"complete.txt"),"All 9 endings exported.");
+        File.WriteAllText(Path.Combine(output,"complete.txt"),first == last ? $"ED{first} exported." : "All 9 endings exported.");
         EditorApplication.Exit(0);
     }
 
@@ -105,7 +109,12 @@ public class EndingVideoRunner : MonoBehaviour
             if(recording) foreach(float sample in buffer) audio.Write(sample);
         }
         if(!recording) return;
-        var cam=GameManager.Instance.Rig.head.GetComponent<Camera>();
+        var rig=GameManager.Instance.Rig;
+        rig.leftHand.transform.position=rig.head.TransformPoint(new Vector3(-.22f,-.32f,.45f));
+        rig.rightHand.transform.position=rig.head.TransformPoint(new Vector3(.22f,-.32f,.45f));
+        rig.leftHand.transform.rotation=rig.head.rotation;
+        rig.rightHand.transform.rotation=rig.head.rotation;
+        var cam=rig.head.GetComponent<Camera>();
         var previous=cam.targetTexture;
         cam.targetTexture=target;
         cam.Render();
@@ -131,4 +140,6 @@ public class EndingVideoRunner : MonoBehaviour
         File.Delete(Path.Combine(output,$"ED{current}.f32"));
     }
 }
+
+
 

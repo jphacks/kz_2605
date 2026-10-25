@@ -1,2 +1,0 @@
-ED1: 1161 frames, 38.70s
-ED2: 979 frames, 32.63s
