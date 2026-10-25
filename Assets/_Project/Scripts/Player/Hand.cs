@@ -17,7 +17,8 @@ namespace JPHACKS2026
         public float Speed => Velocity.magnitude;
         public bool GripPressed => GripValue > 0.55f;
         public float GripValue => DesktopSimulator.Active ? DesktopSimulator.Grip(side) : GameInput.Grip(side);
-        public bool TriggerPressed => (DesktopSimulator.Active ? DesktopSimulator.Trigger(side) : GameInput.Trigger(side)) > 0.55f;
+        public float TriggerValue => DesktopSimulator.Active ? DesktopSimulator.Trigger(side) : GameInput.Trigger(side);
+        public bool TriggerPressed => TriggerValue > 0.55f;
 
         readonly Vector3[] samples = new Vector3[6];
         int sampleIndex;
@@ -29,6 +30,7 @@ namespace JPHACKS2026
             var rb = GetComponent<Rigidbody>();
             rb.isKinematic = true;
             rb.useGravity = false;
+            HandVisual.TryAttach(this);   // 手のモデルがあれば仮のミトンと置き換える
             SetAged(false);
         }
 

@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 
 namespace JPHACKS2026
@@ -201,25 +201,25 @@ namespace JPHACKS2026
             tc.idle=SimpleCharacter.Idle.None;
             tc.lookAtPlayer = true;
             gm.story.FleeBeachChildren(7f);
+            // 急に大きくなると何が起きたか分からないので、海の異変 → 亀の怒り → 正体の説明 の順に見せてから巨大化させる。
+            // ナレーションは映像の動きを待たずに同時に流す（待つと声が絵より遅れて聞こえる）
+            gm.PlaySfx(rumbleSound);
+            var talk=gm.StartCoroutine(Say(StoryScript.Ed2a[1]));
             // Reposition under black; keep the HMD stationary during the reveal.
             yield return Reframe(turtle.position-turtle.parent.forward*8.5f,turtle.position+Vector3.up*2.5f);
             var facing=gm.Rig.Head.position-turtle.position; facing.y=0;
             if(facing.sqrMagnitude>.01f) turtle.rotation=Quaternion.LookRotation(facing);
-            gm.PlaySfx(rumbleSound);
             Motes(turtle.position + Vector3.up, new Color(.24f,.48f,.62f), 3f, .45f, 110);
-            // 急に大きくなると何が起きたか分からないので、海の異変 → 亀の怒り → 正体の説明 の順に見せてから巨大化させる
-            yield return Say(StoryScript.Ed2a[1]);
+            yield return talk;
             yield return Say(StoryScript.Ed2b[0]);
-            yield return Tween.Wait(.4f);
             gm.StartCoroutine(Tween.Environment(new Color(.015f,.035f,.055f),new Color(.12f,.17f,.20f),
                 new Color(.65f,.78f,.85f),.65f,new Color(.02f,.055f,.075f),.025f,2.6f));
-            // 海の光が亀に集まり、その力で大きくなる。説明のナレーションと同時に、見上げる時間をとってゆっくり伸ばす
+            // 海の光が亀に集まり、その力で大きくなる。説明のナレーションの間じゅう、見上げながらゆっくり伸ばす
             Motes(turtle.position + Vector3.up, new Color(.35f,.75f,.85f), 1.2f, .9f, 140);
             var scale=turtle.localScale;
-            var grow=gm.StartCoroutine(Tween.Run(3.5f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
+            var grow=gm.StartCoroutine(Tween.Run(6f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
             yield return Say(StoryScript.Ed2b[1]);
             yield return grow;
-            yield return Tween.Wait(.6f);
             // Limit the lunge using the enlarged mesh bounds, then cut to deep sea.
             var direction=gm.Rig.Head.position-turtle.position; direction.y=0;
             var distance=direction.magnitude;
@@ -234,9 +234,11 @@ namespace JPHACKS2026
             var start=turtle.position;
             float travel=Mathf.Clamp(distance-front-1.5f,0,1.8f);
             yield return Tween.Run(.95f,k=>turtle.position=start+direction*(travel*k*k));
+            // 襲いかかった瞬間から語り始め、暗転はその声に重ねる
+            talk=gm.StartCoroutine(Say(StoryScript.Ed2b[2]));
             yield return gm.Fader.FadeTo(new Color(0f,.025f,.055f),1f,.7f);
-            yield return Say(StoryScript.Ed2b[2]);
-            yield return Tween.Wait(.6f);
+            yield return talk;
+            yield return Tween.Wait(.3f);
         }
 
         /// <summary>ED3：行かない。亀が「ここまで準備したのに！」と嘆くコメディ。</summary>
@@ -407,32 +409,107 @@ namespace JPHACKS2026
             yield return gm.Fader.FadeTo(new Color(1f, 0.95f, 0.85f), 1f, 2.5f);
         }
 
+        // ED8: The unopened box becomes a shared promise and a new home.
         IEnumerator Ed8()
         {
-            var village=gm.GetArea("village").transform;
-            var elder=village.Find("Villager");
-            var lid=A<Grabbable>("village.box.lid");
-            lid.ForceRelease();
-            var box=lid.transform.parent;
-            var boxPosition=box.position;
-            gm.StartCoroutine(Tween.Environment(new Color(.95f,.7f,.48f), new Color(.7f,.58f,.48f),
-                new Color(1f,.8f,.55f), 1.15f, new Color(.95f,.8f,.62f), .012f, 4f));
-            yield return Say(new Line(null,"浦島太郎","この玉手箱を、預かってもらえませんか。開けずに、大切にしてください。"));
-            if(elder!=null)
+            var village = gm.GetArea("village").transform;
+            var elder = village.Find("Villager");
+            var lid = A<Grabbable>("village.box.lid");
+            var box = lid.transform.parent;
+            var boxPosition = box.position;
+            var boxRotation = box.rotation;
+            var grabs = box.GetComponentsInChildren<Grabbable>();
+            var bodies = box.GetComponentsInChildren<Rigidbody>();
+            var colliders = box.GetComponentsInChildren<Collider>();
+            var kinematic = new bool[bodies.Length];
+            var collisionEnabled = new bool[colliders.Length];
+            foreach (var grab in grabs) grab.ForceRelease();
+            for (int i = 0; i < bodies.Length; i++)
             {
-                foreach(var grab in box.GetComponentsInChildren<Grabbable>()) grab.ForceRelease();
-                foreach(var rb in box.GetComponentsInChildren<Rigidbody>()) rb.isKinematic=true;
-                yield return Tween.Move(box,elder.position+Vector3.up*.82f-elder.forward*.26f,1.3f);
-                Motes(box.position, new Color(1f,.83f,.45f), .45f, .08f, 35);
-                var villager = elder.GetComponent<SimpleCharacter>();
-                if (villager != null) yield return Bow(villager);
+                kinematic[i] = bodies[i].isKinematic;
+                bodies[i].isKinematic = true;
             }
-            yield return Say(new Line(null,"村のおじさん","わかった。約束するよ。あんたも、この村で暮らしていきなさい。"),
-                new Line(null,"語り","玉手箱を村のおじさんに託した浦島太郎は、変わり果てた村で、新しい暮らしを始めました。"));
-            yield return gm.Fader.FadeTo(new Color(1,.91f,.75f),1,2f);
-            box.position=boxPosition;
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                collisionEnabled[i] = colliders[i].enabled;
+                colliders[i].enabled = false;
+            }
+            gm.Rig.LocomotionEnabled = false;
+            try
+            {
+                // Reframe under black, without moving the VR camera during dialogue.
+                if (elder != null)
+                    yield return Reframe(elder.position - village.forward * 2.4f - village.right * .7f,
+                        elder.position + Vector3.up * 1.05f);
+                yield return Tween.Environment(new Color(.95f,.64f,.43f), new Color(.65f,.48f,.39f),
+                    new Color(1f,.73f,.43f), 1.05f, new Color(.95f,.74f,.55f), .012f, 2.5f);
+                yield return Say(StoryScript.Ed8Promise);
+                if (elder != null)
+                {
+                    var character = elder.GetComponent<SimpleCharacter>();
+                    if (character != null) yield return Bow(character, 12f);
+                    var from = box.position;
+                    var to = elder.position + Vector3.up * .85f + elder.forward * .42f;
+                    var rotation = box.rotation;
+                    yield return Tween.Run(1.8f, k =>
+                    {
+                        float t = Tween.Smooth(k);
+                        box.position = Vector3.Lerp(from, to, t) + Vector3.up * (Mathf.Sin(t * Mathf.PI) * .12f);
+                        box.rotation = Quaternion.Slerp(rotation, elder.rotation, t);
+                    });
+                    yield return Tween.Wait(.7f);
+                }
+                yield return Say(StoryScript.Ed8Receive);
+                yield return Say(StoryScript.Ed8Invitation);
+                if (elder != null)
+                {
+                    var character = elder.GetComponent<SimpleCharacter>();
+                    if (character != null)
+                    {
+                        character.lookAtPlayer = false;
+                        character.lookTarget = null;
+                        character.idle = SimpleCharacter.Idle.Bob;
+                    }
+                    // Stop outside the nearest house, beside the village path.
+                    var destination = village.TransformPoint(new Vector3(2.25f, 0, 3.65f));
+                    var from = elder.position;
+                    var rotation = elder.rotation;
+                    var direction = destination - from;
+                    var facing = direction.sqrMagnitude > .01f ? Quaternion.LookRotation(direction) : rotation;
+                    var carryOffset = Quaternion.Inverse(elder.rotation) * (box.position - elder.position);
+                    yield return Tween.Run(3f, k =>
+                    {
+                        elder.position = Vector3.Lerp(from, destination, Tween.Smooth(k));
+                        elder.rotation = Quaternion.Slerp(rotation, facing, Mathf.Clamp01(k * 3));
+                        box.SetPositionAndRotation(elder.position + elder.rotation * carryOffset, elder.rotation);
+                    });
+                    // Turn back together so the box stays in front of the elder.
+                    rotation = elder.rotation;
+                    var towardPlayer = gm.Rig.Head.position - elder.position;
+                    towardPlayer.y = 0;
+                    facing = towardPlayer.sqrMagnitude > .01f ? Quaternion.LookRotation(towardPlayer) : rotation;
+                    yield return Tween.Run(.8f, k =>
+                    {
+                        elder.rotation = Quaternion.Slerp(rotation, facing, Tween.Smooth(k));
+                        box.SetPositionAndRotation(elder.position + elder.rotation * carryOffset, elder.rotation);
+                    });
+                    yield return Tween.Wait(.8f);
+                }
+                Motes(box.position + Vector3.up * .5f, new Color(1f,.78f,.4f), 1.1f, .045f, 24);
+                yield return Say(StoryScript.Ed8End);
+                yield return Tween.Wait(1.5f);
+                yield return gm.Fader.FadeTo(new Color(1,.91f,.75f), 1, 2.5f);
+            }
+            finally
+            {
+                box.SetPositionAndRotation(boxPosition, boxRotation);
+                for (int i = 0; i < bodies.Length; i++)
+                    if (bodies[i] != null) bodies[i].isKinematic = kinematic[i];
+                for (int i = 0; i < colliders.Length; i++)
+                    if (colliders[i] != null) colliders[i].enabled = collisionEnabled[i];
+                gm.Rig.LocomotionEnabled = true;
+            }
         }
-
         IEnumerator EscapeOtohime()
         {
             var area=gm.GetArea("ryugu").transform;

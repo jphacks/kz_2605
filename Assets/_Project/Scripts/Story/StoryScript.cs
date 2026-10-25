@@ -14,6 +14,7 @@ namespace JPHACKS2026
         const string Kodomo = "子ども";
         const string Oto = "乙姫";
         const string Murabito = "村人";
+        const string Elder = "村のおじいさん";
 
         static Line L(string id, string speaker, string text) => new(id, speaker, text);
 
@@ -163,6 +164,32 @@ namespace JPHACKS2026
             L("ed7_01", N, "浦島太郎は、玉手箱を開けずに、そっと置いていきました。"),
             L("ed7_02", N, "知らない時代、知らない人たち。それでも、ここから新しい人生を始めよう。"),
             L("ed7_03", N, "浦島太郎は、朝日に向かって歩き出しました。"),
+        };
+
+        public static readonly Line[] Ed8Promise =
+        {
+            L(null, N, "浦島太郎は、玉手箱を抱えたまま、しばらく立ち尽くしていました。"),
+            L(null, "浦島太郎", "この箱には、帰れなくなった日々まで入っている気がするんです。……けれど、開けてはいけないと約束しました。"),
+            L(null, "浦島太郎", "どうか、預かってもらえませんか。ひとりで持っていると、開けてしまいそうで。"),
+            L(null, Elder, "……そうか。大事な約束なんじゃな。なら、わしも一緒に守ろう。"),
+        };
+        public static readonly Line[] Ed8Receive =
+        {
+            L(null, N, "おじいさんは、ふたに手をかけることもなく、箱をそっと受け止めました。"),
+            L(null, Elder, "中身は聞かんよ。話したくなったら、おまえさんの言葉で聞かせておくれ。"),
+            L(null, "浦島太郎", "……ありがとうございます。"),
+        };
+        public static readonly Line[] Ed8Invitation =
+        {
+            L(null, Elder, "さて、そろそろ飯にしよう。ひとり分も、ふたり分も、手間はそう変わらん。"),
+            L(null, "浦島太郎", "ぼくも……一緒で、いいんですか。"),
+            L(null, Elder, "もちろんじゃ。明日は網の繕いを手伝ってくれるかい。"),
+            L(null, "浦島太郎", "はい。それなら、得意です。"),
+        };
+        public static readonly Line[] Ed8End =
+        {
+            L(null, N, "失くした日々は、戻りません。それでも、明日の約束がひとつできました。"),
+            L(null, N, "玉手箱は、とうとう開かれませんでした。代わりに、見知らぬ家の戸が、浦島太郎のために開いたのでした。"),
         };
 
         public static readonly Line[] Medetashi = { L("medetashi", N, "めでたし、めでたし。") };

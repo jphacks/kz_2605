@@ -125,10 +125,10 @@ namespace JPHACKS2026
 
         public void GoToTitle() => RunFlow(TitleFlow());
         public void BeginStory(Chapter from) => RunFlow(StoryFlow(from, false));
-        /// <summary>直前の選択肢から再開。章の導入ナレーションは聞き直さずに選択肢へ進む。</summary>
+        /// <summary>直前の選択肢から再開。章の導入ナレーションは最後の2つのセリフだけ流して選択肢へ進む。</summary>
         public void RetryCheckpoint() => RunFlow(StoryFlow(Checkpoint, true));
         public void RestartStory() => BeginStory(Chapter.Beach);
-        /// <summary>タイトルのチャプター選択：その章の選択肢から始める（導入ナレーションは省略）。</summary>
+        /// <summary>タイトルのチャプター選択：その章の選択肢から始める（導入ナレーションは最後の2つのセリフだけ）。</summary>
         public void JumpToChapter(Chapter c) => RunFlow(StoryFlow(c, true));
 
         static readonly (Chapter chapter, string label)[] ChapterMenu =

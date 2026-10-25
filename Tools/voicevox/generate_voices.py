@@ -44,7 +44,8 @@ def request(path, params=None, body=None):
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST" if params is not None or body is not None else "GET",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as res:
+    # ローカルのエンジンなので、Windows のプロキシ設定を通さない（通すと 503 になることがある）
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=120) as res:
         return res.read()
 
 

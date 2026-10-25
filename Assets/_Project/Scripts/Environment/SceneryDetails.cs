@@ -135,17 +135,11 @@ namespace JPHACKS2026
             var shore=area.Find("Shore"); if(shore!=null) shore.gameObject.SetActive(false);
             var sea=area.Find("Sea"); if(sea!=null) sea.gameObject.SetActive(false);
             Group(t,"Shoreline waves",Vector3.zero).gameObject.AddComponent<ShorelineWaves>();
+            int stickIndex = 0;
             foreach (Transform child in area)
             {
                 if (child.name != "Driftwood" || child.GetComponent<Grabbable>() != null) continue;
-                var rb = child.gameObject.AddComponent<Rigidbody>();
-                rb.mass = .65f; rb.isKinematic = true;
-                var grab = child.gameObject.AddComponent<Grabbable>();
-                grab.kinematicUntilGrabbed = true;
-                var collider = child.GetComponent<Collider>();
-                if (collider != null && collider is MeshCollider meshCollider) meshCollider.convex = true;
-                if (collider == null) child.gameObject.AddComponent<CapsuleCollider>();
-                child.gameObject.AddComponent<Resettable>();
+                BeachStick(child, stickIndex++);
             }
             for(int i=0;i<22;i++)
             {
@@ -217,6 +211,86 @@ namespace JPHACKS2026
         }
         static string ReefModel(int index) => index % 3 == 0 ? "ReefButterfly" : index % 3 == 1 ? "ReefClownfish" : "ReefTang";
 
+        // 足もとに寝かせた丸太は拾いにくいので、手で持てる長さの木の棒にして、出現地点のすぐ前に置く。
+        // 1本目は砂に突き立てて、手を伸ばせば握れる高さ（先端が約1m）にする。2本目は亀のそばに寝かせる
+        const float StickLength = 1.1f;
+        static readonly (Vector3 position, Vector3 rotation)[] StickPlacements =
+        {
+            (new Vector3(.5f, .47f, -1.75f), new Vector3(-80, 15, 0)),
+            (new Vector3(-1.1f, .035f, -1.1f), new Vector3(0, 65, 0)),
+        };
+
+        static void BeachStick(Transform stick, int index)
+        {
+            var go = stick.gameObject;
+            if (index < StickPlacements.Length)
+            {
+                stick.localPosition = StickPlacements[index].position;
+                stick.localRotation = Quaternion.Euler(StickPlacements[index].rotation);
+            }
+            stick.localScale = Vector3.one;
+            // 円柱の見た目は Blender の流木に置き換える（モデルが無ければ細い円柱）
+            var cylinder = go.GetComponent<MeshRenderer>();
+            if (cylinder != null) cylinder.enabled = false;
+            if (StickModel(stick) == null)
+                Shape(stick, "Stick", Vector3.zero, new Vector3(.045f, StickLength / 2, .045f), new Color(.43f, .38f, .31f), PrimitiveType.Cylinder, new Vector3(90, 0, 0));
+            // 見た目より太めの当たり判定にして、だいたいの位置に手を伸ばせばつかめるようにする
+            foreach (var c in go.GetComponents<Collider>()) Object.DestroyImmediate(c);
+            var capsule = go.AddComponent<CapsuleCollider>();
+            capsule.direction = 2;
+            capsule.radius = .045f;
+            capsule.height = StickLength;
+            var rb = go.GetComponent<Rigidbody>();
+            if (rb == null) rb = go.AddComponent<Rigidbody>();
+            rb.mass = .35f; rb.isKinematic = true;
+            var grab = go.AddComponent<Grabbable>();
+            grab.kinematicUntilGrabbed = true;
+            go.AddComponent<HitStick>();
+            go.AddComponent<Resettable>();
+        }
+
+        /// <summary>流木のモデルを、いちばん長い向きをローカルZに揃え、中心を原点にして付ける。</summary>
+        static GameObject StickModel(Transform stick)
+        {
+            var prefab = Resources.Load<GameObject>("Scenery/BeachStick");
+            if (prefab == null) return null;
+            var visual = Object.Instantiate(prefab);
+            visual.name = "Blender BeachStick";
+            var renderers = visual.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) { Object.Destroy(visual); return null; }
+            var size = RendererBounds(renderers).size;
+            if (size.x >= size.y && size.x >= size.z) visual.transform.rotation = Quaternion.Euler(0, -90, 0) * visual.transform.rotation;
+            else if (size.y >= size.z) visual.transform.rotation = Quaternion.Euler(90, 0, 0) * visual.transform.rotation;
+            visual.transform.localScale *= StickLength / Mathf.Max(.001f, RendererBounds(renderers).size.z);
+            visual.transform.position -= RendererBounds(renderers).center;
+            foreach (var c in visual.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+            Repaint(renderers);
+            visual.transform.SetParent(stick, false);
+            return visual;
+        }
+
+        static Bounds RendererBounds(Renderer[] renderers)
+        {
+            var bounds = renderers[0].bounds;
+            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+            return bounds;
+        }
+
+        static void Repaint(Renderer[] renderers)
+        {
+            foreach (var r in renderers)
+            {
+                var materials = r.sharedMaterials;
+                for (int j = 0; j < materials.Length; j++)
+                {
+                    var source = materials[j];
+                    if (source == null) continue;
+                    materials[j] = Paint(source.HasProperty("_BaseColor") ? source.GetColor("_BaseColor") : source.color);
+                }
+                r.sharedMaterials = materials;
+            }
+        }
+
         static GameObject AddBlenderModel(Transform parent, string name, float length)
         {
             var prefab = Resources.Load<GameObject>("Scenery/" + name);
@@ -240,17 +314,7 @@ namespace JPHACKS2026
             var bounds = renderers[0].bounds;
             foreach (var r in renderers) bounds.Encapsulate(r.bounds);
             visual.transform.localScale *= length / Mathf.Max(.001f, bounds.size.z);
-            foreach (var r in renderers)
-            {
-                var materials = r.sharedMaterials;
-                for (int j = 0; j < materials.Length; j++)
-                {
-                    var source = materials[j];
-                    if (source == null) continue;
-                    materials[j] = Paint(source.HasProperty("_BaseColor") ? source.GetColor("_BaseColor") : source.color);
-                }
-                r.sharedMaterials = materials;
-            }
+            Repaint(renderers);
             visual.transform.SetParent(parent, false);
             return visual;
         }
