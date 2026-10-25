@@ -1,6 +1,6 @@
 # 童話配信
 
-[![IMAGE ALT TEXT HERE](https://jphacks.com/wp-content/uploads/2026/07/IMG_5316.png)](https://www.youtube.com/watch?v=piaNsc6ilBI)
+![童話配信 キービジュアル](S__16269315.jpg)
 
 ## 製品概要
 ### 背景(製品開発のきっかけ、課題等）
@@ -74,4 +74,3 @@
   * [Assets/_Project/Scripts/Endings/EndingDirector.cs](Assets/_Project/Scripts/Endings/EndingDirector.cs)
 * **選択肢の途中から始める機能・チャプター選択**：commit `f34f87a`
 * **全ルートの自動テスト**：[Assets/_Project/Scripts/Tests/AllRoutesTest.cs](Assets/_Project/Scripts/Tests/AllRoutesTest.cs)
-
