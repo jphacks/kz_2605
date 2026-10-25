@@ -63,6 +63,7 @@ namespace JPHACKS2026
         /// <summary>デスクトップ確認用：数字キー1〜3で選択肢を直接選ぶ。押されていなければ-1。</summary>
         public static int DebugNumberKeyDown()
         {
+            if (Paused) return -1;
             if (DebugQueue.Count > 0) return DebugQueue.Dequeue();
             var kb = Keyboard.current;
             if (kb == null) return -1;
@@ -72,8 +73,12 @@ namespace JPHACKS2026
             return -1;
         }
 
+        // ポーズ中は選択肢や台詞送りを受け付けない（物語のコルーチンは timeScale=0 でも毎フレーム回るため）
+        static bool Paused => GameManager.Instance != null && GameManager.Instance.IsPaused;
+
         public static bool DebugSkipDown()
         {
+            if (Paused) return false;
             var kb = Keyboard.current;
             return kb != null && kb.spaceKey.wasPressedThisFrame;
         }

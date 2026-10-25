@@ -59,6 +59,9 @@ namespace JPHACKS2026.Editor
             BuildBeach(new Vector3(100, 0, 0));
             BuildSea(new Vector3(200, 0, 0));
             BuildRyugu(new Vector3(300, 0, 0));
+            BanquetHallModelSetup.Setup();
+            foreach (var area in Object.FindObjectsByType<Area>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                BanquetHallVisual.Build(area);
             BuildVillage(new Vector3(400, 0, 0));
 
             EditorSceneManager.SaveScene(scene, ScenePath);

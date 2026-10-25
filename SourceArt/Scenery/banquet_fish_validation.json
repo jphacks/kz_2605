@@ -1,0 +1,12 @@
+{
+  "BanquetTai": {
+    "meshes": 4,
+    "vertices": 13270,
+    "triangles": 24172
+  },
+  "BanquetHirame": {
+    "meshes": 4,
+    "vertices": 15758,
+    "triangles": 30376
+  }
+}

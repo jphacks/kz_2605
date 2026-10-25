@@ -178,7 +178,7 @@ namespace JPHACKS2026
             yield return Tween.Wait(1f);
         }
 
-        /// <summary>ED2：一緒にいじめる。巨大な亀が報復し、海に引きずり込むホラー。</summary>
+        /// <summary>ED2：一緒にいたずらする。亀の正体は竜宮城の使い。海の力で巨大になって報復し、海に引きずり込むホラー。</summary>
         IEnumerator Ed2()
         {
             var turtle=A("beach.turtle");
@@ -193,7 +193,9 @@ namespace JPHACKS2026
             var tc=turtle.GetComponent<SimpleCharacter>();
             var body=tc.body;
             var rest=body.localScale;
-            yield return Tween.Run(2f,k=>body.localScale=Vector3.Scale(rest,new Vector3(1,1-.10f*Mathf.Abs(Mathf.Sin(k*12)),1)));
+            var squash=gm.StartCoroutine(Tween.Run(2f,k=>body.localScale=Vector3.Scale(rest,new Vector3(1,1-.10f*Mathf.Abs(Mathf.Sin(k*12)),1))));
+            yield return Say(StoryScript.Ed2a[0]);
+            yield return squash;
             body.localScale=rest;
             tc.StopAllCoroutines();
             tc.idle=SimpleCharacter.Idle.None;
@@ -205,15 +207,18 @@ namespace JPHACKS2026
             if(facing.sqrMagnitude>.01f) turtle.rotation=Quaternion.LookRotation(facing);
             gm.PlaySfx(rumbleSound);
             Motes(turtle.position + Vector3.up, new Color(.24f,.48f,.62f), 3f, .45f, 110);
-            // Let the warning register before the silhouette starts changing.
-            yield return Tween.Wait(.6f);
+            // 急に大きくなると何が起きたか分からないので、海の異変 → 亀の怒り → 正体の説明 の順に見せてから巨大化させる
+            yield return Say(StoryScript.Ed2a[1]);
+            yield return Say(StoryScript.Ed2b[0]);
+            yield return Tween.Wait(.4f);
             gm.StartCoroutine(Tween.Environment(new Color(.015f,.035f,.055f),new Color(.12f,.17f,.20f),
                 new Color(.65f,.78f,.85f),.65f,new Color(.02f,.055f,.075f),.025f,2.6f));
-            // Give the player time to look up as the tenfold silhouette grows.
+            // 海の光が亀に集まり、その力で大きくなる。説明のナレーションと同時に、見上げる時間をとってゆっくり伸ばす
+            Motes(turtle.position + Vector3.up, new Color(.35f,.75f,.85f), 1.2f, .9f, 140);
             var scale=turtle.localScale;
-            yield return Tween.Run(2.6f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k)));
-            yield return Tween.Wait(1.1f);
-            yield return Say(StoryScript.Ed2b[0]);
+            var grow=gm.StartCoroutine(Tween.Run(3.5f,k=>turtle.localScale=Vector3.LerpUnclamped(scale,scale*10f,Tween.Smooth(k))));
+            yield return Say(StoryScript.Ed2b[1]);
+            yield return grow;
             yield return Tween.Wait(.6f);
             // Limit the lunge using the enlarged mesh bounds, then cut to deep sea.
             var direction=gm.Rig.Head.position-turtle.position; direction.y=0;
@@ -230,7 +235,8 @@ namespace JPHACKS2026
             float travel=Mathf.Clamp(distance-front-1.5f,0,1.8f);
             yield return Tween.Run(.95f,k=>turtle.position=start+direction*(travel*k*k));
             yield return gm.Fader.FadeTo(new Color(0f,.025f,.055f),1f,.7f);
-            yield return Tween.Wait(1f);
+            yield return Say(StoryScript.Ed2b[2]);
+            yield return Tween.Wait(.6f);
         }
 
         /// <summary>ED3：行かない。亀が「ここまで準備したのに！」と嘆くコメディ。</summary>

@@ -232,6 +232,8 @@ namespace JPHACKS2026
                     if (d.sqrMagnitude > .000001f) visual.transform.rotation = Quaternion.FromToRotation(d, Vector3.forward) * visual.transform.rotation;
                 }
                 if (tr.name == "Tail") marker.tail = tr;
+                if (tr.name == "FinLeft") marker.finLeft = tr;
+                if (tr.name == "FinRight") marker.finRight = tr;
             }
             var renderers = visual.GetComponentsInChildren<Renderer>();
             if (renderers.Length == 0) { Object.Destroy(visual); return null; }
@@ -263,7 +265,9 @@ namespace JPHACKS2026
                 root.GetComponent<Renderer>().enabled=false;
                 root.localScale=Vector3.one;
                 bool flat=swimmer.name=="Hirame";
-                Fish(root,flat,n++);
+                if (AddBlenderModel(root, flat ? "BanquetHirame" : "BanquetTai", flat ? .75f : .68f) == null)
+                    Fish(root,flat,n);
+                n++;
             }
             var oct=Group(area,"DancingOctopus",new Vector3(0,1.8f,3.6f));
             var swim=oct.gameObject.AddComponent<Swimmer>(); swim.center=new Vector3(0,1.7f,3.6f); swim.radius=1.15f; swim.speed=-.6f;

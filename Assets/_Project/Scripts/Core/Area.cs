@@ -32,6 +32,7 @@ namespace JPHACKS2026
         {
             if (initialized) return;
             if (areaId == "title") TitleRoomDetails.Build(this);
+            BanquetHallVisual.Build(this);
             SceneryDetails.Build(this);
             OceanAmbience.Build(this);
             initialized = true;

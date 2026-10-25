@@ -73,8 +73,24 @@ namespace JPHACKS2026
             if (GameInput.Menu.WasPressedThisFrame())
             {
                 if (IsPaused) Resume();
-                else if (State == GameState.Story) Pause();
+                else if (pauseRequested) pauseRequested = false;
+                else RequestPause();
             }
+            if (pauseRequested && State != GameState.Story) pauseRequested = false;
+            // 暗転・白転中はポーズメニューが暗幕の奥に隠れて見えないので、画面が見えるようになってから止める
+            if (pauseRequested && Fader.Alpha < 0.5f) Pause();
+        }
+
+        // Questのシステムメニュー（Oculusボタン）を開いた・ヘッドセットを外したなど、
+        // アプリから入力が離れたら物語が先に進まないよう自動でポーズする。エディタでは別ウィンドウを触るたびに止まるので除く
+        void OnApplicationFocus(bool focus)
+        {
+            if (!focus && !Application.isEditor && !Application.isBatchMode) RequestPause();
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            if (paused && !Application.isEditor && !Application.isBatchMode) RequestPause();
         }
 
         // ── 流れの切り替え ────────────────────────────
@@ -95,6 +111,7 @@ namespace JPHACKS2026
                 AudioListener.pause = false;
                 IsPaused = false;
             }
+            pauseRequested = false;
             adjustingEye = false;
             PauseMenu.Hide();
             Menu.Hide();
@@ -244,7 +261,7 @@ namespace JPHACKS2026
         void ShowHud(bool show)
         {
             hud.SetActive(show);
-            hudText.text = $"達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}";
+            hudText.text = $"達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}　　ポーズ：左手のメニューボタン";
             if (LiveStream.Instance != null && LiveStream.Instance.Config.ViewerUrl.Length > 0)
                 hudText.text = $"スマホで見る：{LiveStream.Instance.Config.ViewerUrl}\n" + hudText.text;
         }
@@ -336,8 +353,16 @@ namespace JPHACKS2026
 
         // ── ポーズ ───────────────────────────────────
 
+        bool pauseRequested;
+
+        void RequestPause()
+        {
+            if (State == GameState.Story && !IsPaused) pauseRequested = true;
+        }
+
         public void Pause()
         {
+            pauseRequested = false;
             IsPaused = true;
             Time.timeScale = 0;
             AudioListener.pause = true;

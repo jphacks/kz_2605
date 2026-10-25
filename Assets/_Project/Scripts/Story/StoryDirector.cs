@@ -131,7 +131,7 @@ namespace JPHACKS2026
         static T A<T>(string id) where T : Component => StoryAnchor.Get<T>(id);
         static Transform A(string id) => StoryAnchor.Get(id);
 
-        // ── ① 浜辺：亀がいじめられている ────────────────
+        // ── ① 浜辺：亀がいたずらされている ────────────────
 
         IEnumerator Beach()
         {
@@ -142,14 +142,14 @@ namespace JPHACKS2026
             int r = -1;
             yield return Choose(new ChoiceDef
             {
-                question = "亀がいじめられている。どうする？",
+                question = "亀がいたずらされている。どうする？",
                 timeLimit = walkChoiceTime,
                 options = new[]
                 {
                     new ChoiceDef.Option("助ける", "子どもたちを\n手で追い払う",
                         A<TouchTrigger>("beach.child.0"), A<TouchTrigger>("beach.child.1"), A<TouchTrigger>("beach.child.2")),
                     new ChoiceDef.Option("見過ごす", "亀から離れて\n立ち去る", A<LeaveTrigger>("beach.leave")),
-                    new ChoiceDef.Option("一緒にいじめる", "亀を叩く", A<TouchTrigger>("beach.turtle.hit")),
+                    new ChoiceDef.Option("一緒にいたずらする", "亀を叩く", A<TouchTrigger>("beach.turtle.hit")),
                 },
             }, v => r = v);
 

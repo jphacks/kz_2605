@@ -76,7 +76,7 @@ namespace JPHACKS2026.Tests
 
         // 入力：絵本(0) → 物語を始める(0) → 各分岐の選択 → 「おわり」でタイトルへ(0)
         [UnityTest] public IEnumerator ED1_見過ごす() { yield return PlayRoute(EndingId.ED1, 0, 0, 1, 0); }
-        [UnityTest] public IEnumerator ED2_いじめる() { yield return PlayRoute(EndingId.ED2, 0, 0, 2, 0); }
+        [UnityTest] public IEnumerator ED2_いたずら() { yield return PlayRoute(EndingId.ED2, 0, 0, 2, 0); }
         [UnityTest] public IEnumerator ED3_行かない() { yield return PlayRoute(EndingId.ED3, 0, 0, 0, 1, 0); }
         [UnityTest] public IEnumerator ED4_探索() { yield return PlayRoute(EndingId.ED4, 0, 0, 0, 0, 1, 0, 0, 0, 0); }
         [UnityTest] public IEnumerator ED5_帰らない() { yield return PlayRoute(EndingId.ED5, 0, 0, 0, 0, 0, 1, 0); }
@@ -165,9 +165,48 @@ namespace JPHACKS2026.Tests
         }
 
         [UnityTest]
+        public IEnumerator BanquetModelsAndInteractions()
+        {
+            yield return WaitUntilState(GameState.Title);
+            var gm = GameManager.Instance;
+            gm.StopAllCoroutines();
+            gm.SwitchArea("ryugu");
+            yield return null;
+            var area = gm.GetArea("ryugu");
+            var hall = area.transform.Find("Enkaijou");
+            Assert.IsNotNull(hall);
+            Assert.IsNotNull(hall.Find("Banquet room model/Tatami_40"));
+            Assert.IsFalse(area.transform.Find("HallFloor").GetComponent<Renderer>().enabled);
+            Assert.IsFalse(area.transform.Find("TableL").GetComponent<Renderer>().enabled);
+            Assert.IsNotNull(StoryAnchor.Get<BringToHeadTrigger>("ryugu.eat"));
+            Assert.IsNotNull(StoryAnchor.Get<ZoneTrigger>("ryugu.secret.enter"));
+            foreach (var renderer in hall.GetComponentsInChildren<Renderer>())
+                foreach (var material in renderer.sharedMaterials)
+                    Assert.AreEqual("Universal Render Pipeline/Lit", material.shader.name);
+            int count = 0;
+            foreach (var model in area.GetComponentsInChildren<SceneryModelVisual>())
+            {
+                if (!model.name.StartsWith("Blender Banquet")) continue;
+                count++;
+                Assert.IsNotNull(model.tail);
+                Assert.IsNotNull(model.finLeft);
+                Assert.IsNotNull(model.finRight);
+                Assert.AreEqual(4, model.GetComponentsInChildren<MeshFilter>().Length);
+                var swimmer = model.GetComponentInParent<Swimmer>();
+                swimmer.SpeedMultiplier = 0;
+                var rest = model.tail.localRotation;
+                yield return Tween.Wait(.2f);
+                Assert.Less(Quaternion.Angle(rest, model.tail.localRotation), .01f);
+            }
+            Assert.AreEqual(6, count);
+            CaptureView("Banquet", area.transform.TransformPoint(new Vector3(0,1.6f,-3.4f)), area.transform.TransformPoint(new Vector3(0,1.3f,3)));
+            Assert.IsEmpty(exceptions, string.Join("\n", exceptions));
+        }
+
+        [UnityTest]
         public IEnumerator 直前の選択肢に戻って別エンド()
         {
-            // ED1のあと「直前の選択肢に戻る」(1) → 浜辺の分岐で「いじめる」(2) → ED2
+            // ED1のあと「直前の選択肢に戻る」(1) → 浜辺の分岐で「いたずらする」(2) → ED2
             yield return PlayRoute(EndingId.ED1, 0, 0, 1, 1, 2, 0);
             float t = 0;
             while (!SaveData.HasEnding(EndingId.ED2) && t < 120f) { t += Time.unscaledDeltaTime; yield return null; }

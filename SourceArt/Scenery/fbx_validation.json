@@ -18,5 +18,15 @@
     "fbx_reimport": true,
     "meshes": 1,
     "vertices": 16274
+  },
+  "BanquetTai": {
+    "fbx_reimport": true,
+    "meshes": 4,
+    "vertices": 13270
+  },
+  "BanquetHirame": {
+    "fbx_reimport": true,
+    "meshes": 4,
+    "vertices": 15758
   }
 }
