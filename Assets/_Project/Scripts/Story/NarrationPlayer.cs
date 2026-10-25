@@ -16,6 +16,8 @@ namespace JPHACKS2026
         public float gapBetweenLines = 0.25f;
 
         public bool IsSpeaking { get; private set; }
+        /// <summary>読み上げ中の行（登場人物の身ぶりに使う）。読んでいないときは null。</summary>
+        public Line? Current { get; private set; }
 
         SubtitleView subtitle;
 
@@ -29,6 +31,7 @@ namespace JPHACKS2026
         IEnumerator SayOne(Line line)
         {
             IsSpeaking = true;
+            Current = line;
             subtitle.Show(line.speaker, line.text);
             if (LiveStream.Instance != null) LiveStream.Instance.PublishSubtitle(line.speaker, line.text);
 
@@ -56,6 +59,7 @@ namespace JPHACKS2026
             subtitle.Hide();
             if (LiveStream.Instance != null) LiveStream.Instance.PublishSubtitle(null, null);
             IsSpeaking = false;
+            Current = null;
             yield return Tween.Wait(gapBetweenLines);
         }
 
@@ -64,6 +68,7 @@ namespace JPHACKS2026
             if (voiceSource != null) voiceSource.Stop();
             if (subtitle != null) subtitle.Hide();
             IsSpeaking = false;
+            Current = null;
         }
     }
 }

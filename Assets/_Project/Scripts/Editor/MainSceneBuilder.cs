@@ -1121,6 +1121,7 @@ namespace JPHACKS2026.Editor
             var oto = BuildHuman("Otohime", t, new Vector3(0, 0, 1.6f), 180, new Color(1f, 0.55f, 0.7f), 1.6f, new Color(0.08f, 0.05f, 0.05f));
             Prim(PrimitiveType.Cube, "Sash", oto.transform.Find("Body"), new Vector3(0, 0.62f, 0), new Vector3(0.48f, 0.08f, 0.4f), gold, collider: false);
             oto.GetComponent<SimpleCharacter>().lookAtPlayer = true;
+            PrincessModelSetup.ReplaceVisual(oto);
             Anchor(oto, "ryugu.otohime");
             var otoZone = Group("TouchZone", oto.transform, Vector3.zero);
             TriggerBox(otoZone, new Vector3(0, 0.95f, 0), new Vector3(0.8f, 1.9f, 0.8f));

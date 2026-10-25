@@ -233,9 +233,9 @@ namespace JPHACKS2026
             }
             var start=turtle.position;
             float travel=Mathf.Clamp(distance-front-1.5f,0,1.8f);
-            yield return Tween.Run(.95f,k=>turtle.position=start+direction*(travel*k*k));
-            // 襲いかかった瞬間から語り始め、暗転はその声に重ねる
+            // 襲いかかるのと同時に語り始め、突進と暗転はその声に重ねる
             talk=gm.StartCoroutine(Say(StoryScript.Ed2b[2]));
+            yield return Tween.Run(.95f,k=>turtle.position=start+direction*(travel*k*k));
             yield return gm.Fader.FadeTo(new Color(0f,.025f,.055f),1f,.7f);
             yield return talk;
             yield return Tween.Wait(.3f);
@@ -367,7 +367,7 @@ namespace JPHACKS2026
             oto.lookAtPlayer = true;
             foreach(var swimmer in swimmers) swimmer.SpeedMultiplier=0;
             yield return Tween.Wait(1.2f);
-            yield return Say(new Line(null,"乙姫","帰り道なんて、もうありません。"));
+            yield return Say(StoryScript.Ed5NoReturn);
             yield return EmergeOtohime(false);
             yield return Say(StoryScript.Ed5End);
             yield return gm.Fader.FadeTo(new Color(0.15f, 0f, 0.05f), 1f, 2.5f);
@@ -513,7 +513,7 @@ namespace JPHACKS2026
         IEnumerator EscapeOtohime()
         {
             var area=gm.GetArea("ryugu").transform;
-            yield return Say(new Line(null,"浦島太郎","今だ、逃げよう！"));
+            yield return Say(StoryScript.Ed9Escape);
             yield return Reframe(area.TransformPoint(new Vector3(4,0,13.2f)),area.TransformPoint(new Vector3(4,1.3f,6.5f)));
             // Hide the seated player's displacement under black to avoid forced VR motion.
             var from=gm.Rig.transform.position;
@@ -527,9 +527,7 @@ namespace JPHACKS2026
             Motes(gm.Rig.Head.position + gm.Rig.Head.forward * 3, new Color(.5f,.75f,.85f), 2.5f, .06f, 45);
             gm.Rig.LocomotionEnabled=true;
             yield return gm.Fader.FadeIn(1f);
-            yield return Say(new Line(null,"語り","背後から乙姫の声が追いかけてきます。浦島太郎は振り返らず、亀の背に飛び乗りました。"),
-                new Line(null,"語り","気がつくと、そこは懐かしい砂浜でした。波の向こうから、あの笑い声がかすかに聞こえます。"),
-                new Line(null,"浦島太郎","もう、あの城へは戻らない。"));
+            yield return Say(StoryScript.Ed9Beach);
             yield return gm.Fader.FadeOut(2f);
         }
     }

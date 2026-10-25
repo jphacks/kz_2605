@@ -145,12 +145,12 @@ namespace JPHACKS2026
         IEnumerator Beach()
         {
             SetCheckpoint(Chapter.Beach);
+            // 一緒にいたずらするには、浜辺の木の棒を拾って亀を叩く（導入の間に叩いても音は鳴る）
+            var turtleHit = A<TouchTrigger>("beach.turtle.hit");
+            turtleHit.requireStick = true;
             yield return gm.GoToArea("beach");
             yield return Intro(StoryScript.BeachIntro);
 
-            // 一緒にいたずらするには、浜辺の木の棒を拾って亀を叩く
-            var turtleHit = A<TouchTrigger>("beach.turtle.hit");
-            turtleHit.requireStick = true;
             int r = -1;
             yield return Choose(new ChoiceDef
             {

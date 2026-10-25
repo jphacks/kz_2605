@@ -268,7 +268,7 @@ namespace JPHACKS2026
 
         // ── エンディング後 ───────────────────────────
 
-        /// <summary>絵本が閉じて「おわり」。達成数を表示し、タイトルか直前の選択肢へ戻る。</summary>
+        /// <summary>物語の場面でED結果を表示し、タイトルを選んだら絵本の部屋へ戻る。</summary>
         public IEnumerator Owari(EndingId id, bool compact = false)
         {
             State = GameState.Menu;
@@ -278,6 +278,28 @@ namespace JPHACKS2026
                 LiveStream.Instance.PublishPhase("ending");
             }
             narration.Stop();
+            bool isNew = SaveData.RecordEnding(id);
+            SaveData.ClearCheckpoint();
+            string body = $"<size=130%><color=#FFE6B0>『{EndingCatalog.Title(id)}』</color></size>"
+                        + (isNew ? "  <color=#FFD27A><size=80%>NEW!</size></color>" : "") + "\n"
+                        + $"<size=80%>{id}　{EndingCatalog.Genre(id)}　／　達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}</size>";
+            int selected = -1;
+            Menu.Show("おわり", body,
+                ("タイトルに戻る", () => selected = 0),
+                ("直前の選択肢に戻る", () => selected = 1));
+            while (selected < 0)
+            {
+                int k = GameInput.DebugNumberKeyDown();
+                if (k == 0 || k == 1) selected = k;
+                yield return null;
+            }
+            Menu.Hide();
+            if (selected == 1)
+            {
+                RetryCheckpoint();
+                yield break;
+            }
+
             // 物語の世界が光にほどけ、絵本の中から部屋へ戻される（入るときの逆）：
             // 光に包まれる → 開いた絵本が強く光った状態で部屋が現れる → 光がページへ吸い込まれていく
             yield return Fader.FadeTo(new Color(1f, 0.97f, 0.9f), 1, compact ? .65f : 1.8f);
@@ -300,22 +322,7 @@ namespace JPHACKS2026
             StartCoroutine(book.GlowTo(0f, compact ? .9f : 1.2f));
             yield return book.Close(compact ? 1.1f : 1.4f);
 
-            bool isNew = SaveData.RecordEnding(id);
-            SaveData.ClearCheckpoint();
-            string body = $"<size=130%><color=#FFE6B0>『{EndingCatalog.Title(id)}』</color></size>"
-                        + (isNew ? "  <color=#FFD27A><size=80%>NEW!</size></color>" : "") + "\n"
-                        + $"<size=80%>{id}　{EndingCatalog.Genre(id)}　／　達成エンディング {SaveData.EndingCount} / {EndingCatalog.Count}</size>";
-            Menu.Show("おわり", body,
-                ("タイトルに戻る", GoToTitle),
-                ("直前の選択肢に戻る", RetryCheckpoint));
-            Menu.PlaceAt(StoryAnchor.Get("title.menu"));
-            while (true)
-            {
-                int k = GameInput.DebugNumberKeyDown();
-                if (k == 0) { GoToTitle(); yield break; }
-                if (k == 1) { RetryCheckpoint(); yield break; }
-                yield return null;
-            }
+            GoToTitle();
         }
 
         /// <summary>開いた絵本の上に「めでたし めでたし」を浮かべ、読み上げてから消す。</summary>

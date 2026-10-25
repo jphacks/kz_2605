@@ -21,7 +21,12 @@ namespace JPHACKS2026
             var h = other.GetComponentInParent<Hand>();
             if (h != null) touching.Add(h);
             var s = other.GetComponentInParent<HitStick>();
-            if (s != null) sticks.Add(s);
+            if (s != null)
+            {
+                sticks.Add(s);
+                // 棒で叩く的になっているときは、当たるたびに音を鳴らす（成立したかどうかに関係なく）
+                if (requireStick) s.PlayHit(other.ClosestPoint(transform.position));
+            }
         }
 
         void OnTriggerExit(Collider other)

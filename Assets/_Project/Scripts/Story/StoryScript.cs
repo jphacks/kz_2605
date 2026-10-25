@@ -147,10 +147,19 @@ namespace JPHACKS2026
         public static readonly Line[] Ed5Loop1 = { L("ed5_02", N, "宴は続きました。十年……") };
         public static readonly Line[] Ed5Loop2 = { L("ed5_03", N, "百年……") };
         public static readonly Line[] Ed5Loop3 = { L("ed5_04", N, "千年……") };
+        public static readonly Line[] Ed5NoReturn = { L("ed5_07", Oto, "帰り道なんて、もうありません。") };
         public static readonly Line[] Ed5End =
         {
             L("ed5_05", Oto, "ずっと、ずうっと、一緒ですよ。"),
             L("ed5_06", N, "浦島太郎が竜宮城を出ることは、二度とありませんでした。"),
+        };
+        // ED9：竜宮城からの脱出（ED4 の巻物の部屋から逃げる）
+        public static readonly Line[] Ed9Escape = { L("ed9_01", Taro, "今だ、逃げよう！") };
+        public static readonly Line[] Ed9Beach =
+        {
+            L("ed9_02", N, "背後から乙姫の声が追いかけてきます。浦島太郎は振り返らず、亀の背に飛び乗りました。"),
+            L("ed9_03", N, "気がつくと、そこは懐かしい砂浜でした。波の向こうから、あの笑い声がかすかに聞こえます。"),
+            L("ed9_04", Taro, "もう、あの城へは戻らない。"),
         };
         public static readonly Line[] Ed6 =
         {

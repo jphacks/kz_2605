@@ -44,6 +44,7 @@ function fixture() {
   const ratings = ['good', 'bad'].map(rating => { const e = new Element(); e.dataset.rating = rating; return e; });
   const submit = new Element(); submit.tag = 'button'; get('feedback-form').append(submit);
   const writes = [];
+  const listeners = {};
   const document = {
     body: new Element(), getElementById: get,
     createElement: tag => { const e = new Element(); e.tag = tag; return e; },
@@ -53,7 +54,7 @@ function fixture() {
     document, window: {}, location: { search: '', href: 'http://localhost/' }, URLSearchParams,
     localStorage: { getItem() { return null; }, setItem() {} },
     initializeApp: () => ({}), getDatabase: () => ({}), ref: (_, p) => p,
-    onValue() {}, onChildAdded() {}, off() {}, query: p => p, limitToLast() {},
+    onValue: (p, handler) => { listeners[p] = handler; }, onChildAdded() {}, off() {}, query: p => p, limitToLast() {},
     set: async (p, v) => writes.push({ path: p, value: v }),
     push: async (p, v) => writes.push({ path: p, value: v }),
     serverTimestamp: () => 12345, onDisconnect: () => ({ remove: async () => {} }),
@@ -62,7 +63,9 @@ function fixture() {
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8')
     .replace(/^import[\s\S]*?from\s+"[^"]+";\s*/gm, '');
   vm.runInContext(source + '\nglobalThis.api={data,renderChoice,castVote,renderEnding,updateLive};', context);
-  return { get, ratings, writes, api: context.api, document };
+  // Firebase から値が届いたことにする（.info/connected やルームの各パス）
+  const emit = (p, value) => listeners[p]({ val: () => value });
+  return { get, ratings, writes, api: context.api, document, emit };
 }
 
 test('Voting remains visible without scrolling, and timer updates keep the same buttons', async () => {
@@ -110,4 +113,47 @@ test('Mobile interaction CSS keeps pinch zoom while preventing button double-tap
   assert.match(css, /\.reaction\s*\{[^}]*touch-action:\s*manipulation/);
   assert.match(css, /\.comment-form input\s*\{[^}]*font-size:\s*16px/);
   assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
+});
+
+test('Before the stream starts, leftover data from the last stream shows the waiting screen, not the ending', () => {
+  const f = fixture();
+  f.emit('.info/connected', true);
+  // 前回の配信の終了の合図・古い映像・結末が残っている
+  f.emit('rooms/test/state', { phase: 'ended' });
+  f.emit('rooms/test/frame', { jpg: 'x', t: Date.now() - 60000 });
+  f.emit('rooms/test/ending', { id: 'ED2', title: '亀の逆襲', genre: 'ホラー' });
+  f.api.updateLive();
+  assert.equal(f.get('screen-empty').hidden, false);
+  assert.equal(f.get('waiting-main').textContent, 'ちょっと待ってね');
+  assert.equal(f.get('thanks').hidden, true);
+  assert.equal(f.get('ending').hidden, true);
+  assert.equal(f.get('feedback').hidden, true);
+  assert.equal(f.get('live-badge').textContent, 'まもなく配信');
+
+  // 配信が始まると待ち画面が消えて LIVE になり、そのあと終われば「配信終了」
+  f.emit('rooms/test/state', { phase: 'title' });
+  f.emit('rooms/test/frame', { jpg: 'y', t: Date.now() });
+  assert.equal(f.get('screen-empty').hidden, true);
+  assert.equal(f.get('live-badge').textContent, 'LIVE');
+  f.emit('rooms/test/state', { phase: 'ended' });
+  assert.equal(f.get('thanks').hidden, false);
+  assert.equal(f.get('live-badge').textContent, '配信終了');
+});
+
+test('While waiting for the stream, viewers are invited to comment and can send a one-tap comment', async () => {
+  const f = fixture();
+  f.emit('.info/connected', true);
+  f.api.updateLive();
+  assert.equal(f.get('waiting-chips').hidden, false);
+  assert.equal(f.get('comment-hint').hidden, false);
+  // ひとことボタンをタップするとコメントとして送られ、きっかけの案内は消える
+  await f.get('waiting-chips').children[0].fire('click');
+  assert.equal(f.writes[0].path, 'rooms/test/audience/comments');
+  assert.equal(f.writes[0].value.text, 'こんにちは！');
+  f.api.updateLive();
+  assert.equal(f.get('comment-hint').hidden, true);
+
+  // 配信が始まれば、ひとことボタンは消える
+  f.emit('rooms/test/frame', { jpg: 'y', t: Date.now() });
+  assert.equal(f.get('waiting-chips').hidden, true);
 });

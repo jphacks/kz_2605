@@ -96,28 +96,44 @@ function renderFrame() {
 const STALL_MS = 15000;          // 配信側の画像がこれだけ届かなければ、通信が途絶えたとみなす
 const OFFLINE_MS = 8000;         // 見ている側がこれだけ切れていれば、通信が途絶えたとみなす
 let everConnected = false;
+let sawLive = false;             // このページを開いてから、配信中の映像を一度でも受け取ったか
+let waiting = false;             // 配信が始まるのを待っている（待ち画面を出している）
+let commented = false;           // このページで自分が一度でもコメントしたか（最初のコメントのきっかけを消す）
 // 新しい画像が届いていればその到着からの時間、まだなら残っていた画像の時刻からの時間（配信側の時計のずれに強くする）
 const frameAge = () => (lastArrival ? Date.now() - lastArrival : data.frame?.t ? serverNow() - data.frame.t : Infinity);
 
 /**
  * LIVE表示と「ご視聴ありがとうございました。」。次のどれかで表示する。
  *  ・配信が閉じた（Unity から終了の合図 state.phase = "ended"）
- *  ・配信側の通信が途絶えた（画像が STALL_MS 届かない。配信が一度も始まっていなければ「準備中」のまま）
+ *  ・配信側の通信が途絶えた（画像が STALL_MS 届かない）
  *  ・見ている側の通信が途絶えた（Firebase から OFFLINE_MS 以上切れている）
+ * 配信が始まる前（このページで配信中の映像をまだ受け取っていない）は、前回の配信のデータが残っていても
+ * 「終了」とはせず、待ち画面「ちょっと待ってね」を出しておく。
  */
 function updateLive() {
   if (connected) everConnected = true;
   const closed = data.state?.phase === "ended";
   const hostLost = !closed && data.frame?.t != null && frameAge() > STALL_MS;
   const selfLost = !connected && everConnected && Date.now() - disconnectedSince > OFFLINE_MS;
-  const ended = closed || hostLost || selfLost;
-  $("feedback").hidden = !data.ending && !closed;
-  const fresh = connected && !ended && frameAge() < STALL_MS;
+  const live = connected && !closed && frameAge() < STALL_MS;
+  if (live) sawLive = true;
+  const ended = selfLost || (sawLive && (closed || hostLost));
+  waiting = !sawLive && !ended;
+  $("feedback").hidden = waiting || (!data.ending && !closed);
+  const fresh = live && !ended;
 
   const badge = $("live-badge");
-  badge.textContent = selfLost ? "通信が途絶えました" : ended ? "配信終了" : fresh ? "LIVE" : connected ? "準備中" : "接続中…";
+  badge.textContent = selfLost ? "通信が途絶えました" : ended ? "配信終了" : fresh ? "LIVE" : waiting && connected ? "まもなく配信" : connected ? "準備中" : "接続中…";
   badge.classList.toggle("offline", !fresh);
   $("screen-empty").hidden = fresh || ended;
+  $("waiting-main").textContent = waiting ? "ちょっと待ってね" : "映像を待っています…";
+  $("waiting-sub").replaceChildren(...(
+    !connected ? ["配信につないでいます…"] :
+    waiting ? ["まもなく配信がはじまります。", document.createElement("br"), "体験者が絵本をひらくと、ここに映像が映ります。"] :
+    ["通信が少し不安定です。このままお待ちください。"]));
+  $("waiting-chips").hidden = !(waiting && connected);
+  $("comment-hint").hidden = !waiting || commented;
+  $("comment-text").placeholder = waiting ? "はじまるまで、ひとことどうぞ" : "コメントする（選択肢の名前で1票）";
   $("thanks").hidden = !ended;
   $("thanks-sub").textContent =
     selfLost ? "通信が途絶えました。電波の良い場所で、ページを再読み込みしてください。" :
@@ -154,8 +170,9 @@ function renderState() {
 // ── エンディング ─────────────────────────────
 function renderEnding() {
   const e = data.ending;
-  $("ending").hidden = !e || !$("thanks").hidden;
-  $("feedback").hidden = !e && data.state?.phase !== "ended";
+  // 待ち画面の間は、前回の配信の結末や感想欄を出さない
+  $("ending").hidden = waiting || !e || !$("thanks").hidden;
+  $("feedback").hidden = waiting || (!e && data.state?.phase !== "ended");
   if (!e) return;
   $("ending-title").textContent = `『${e.title}』`;
   $("ending-genre").textContent = `${e.id}　${e.genre}`;
@@ -290,17 +307,33 @@ function voteFromText(text) {
   return best;
 }
 
+function sendComment(text) {
+  const vote = voteFromText(text);
+  const name = nameInput.value.trim() || "名無しの村人";
+  push(roomRef("audience/comments"), { name, text, vid: viewerId, t: serverTimestamp() });
+  if (vote >= 0) castVote(vote);
+  commented = true;
+  $("comment-hint").hidden = true;
+}
+
 $("comment-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const input = $("comment-text");
   const text = input.value.trim();
   if (!text) return;
-  const vote = voteFromText(text);
-  const name = nameInput.value.trim() || "名無しの村人";
-  push(roomRef("audience/comments"), { name, text, vid: viewerId, t: serverTimestamp() });
-  if (vote >= 0) castVote(vote);
+  sendComment(text);
   input.value = "";
 });
+
+// 待ち画面のひとことコメント。タップするとそのままコメントとして送る
+const WAITING_PHRASES = ["こんにちは！", "たのしみ！", "わくわく", "がんばれ〜"];
+for (const phrase of WAITING_PHRASES) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = phrase;
+  btn.addEventListener("click", () => sendComment(phrase));
+  $("waiting-chips").append(btn);
+}
 
 // 最新50件を表示し、ページを開いたあとに来たコメントは画面の上にも流す
 const openedAt = Date.now();

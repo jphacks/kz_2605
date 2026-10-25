@@ -38,7 +38,14 @@
         <div class="book-page">
           <div class="screen">
             <img id="frame" alt="体験者が見ている絵本の世界">
-            <div id="screen-empty" class="screen-empty">絵本がひらくのを待っています…</div>
+            <!-- 配信が始まる前・映像が途切れている間の待ち画面（文言は app.js の updateLive） -->
+            <div id="screen-empty" class="screen-empty" role="status">
+              <div class="waiting-book" aria-hidden="true"><i></i><i></i><i></i></div>
+              <p id="waiting-main" class="waiting-main">ちょっと待ってね</p>
+              <p id="waiting-sub" class="waiting-sub">まもなく配信がはじまります。<br>体験者が絵本をひらくと、ここに映像が映ります。</p>
+              <!-- 待っている間のひとことコメント（タップで送る。文言は app.js の WAITING_PHRASES） -->
+              <div id="waiting-chips" class="waiting-chips" role="group" aria-label="ひとことコメント"></div>
+            </div>
             <div id="screen-danmaku" class="screen-danmaku" aria-hidden="true"></div>
             <div id="screen-reactions" class="screen-reactions" aria-hidden="true"></div>
             <div id="area-name" class="area-name"></div>
@@ -90,6 +97,8 @@
 
       <section class="card comments">
         <h2 class="card-title">コメント</h2>
+        <!-- 配信が始まる前だけ出す、最初のコメントのきっかけ（自分が1回送ったら消える） -->
+        <p id="comment-hint" class="comment-hint" hidden>💬 はじまるまで、コメントしてみよう！「こんにちは」だけでもOK</p>
         <!-- 映像を見ながら書けるよう、入力欄は一覧の上に置く（新しいコメントは入力欄のすぐ下に出る） -->
         <form id="comment-form" class="comment-form" autocomplete="off">
           <input id="comment-name" class="name-input" maxlength="20" placeholder="なまえ">
