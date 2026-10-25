@@ -3,7 +3,7 @@
 ![童話配信 キービジュアル](S__16269315.jpg)
 
 ## 紹介動画
-[![童話配信 紹介動画]https://www.youtube.com/watch?v=0ReD5HVpSKE
+https://www.youtube.com/watch?v=0ReD5HVpSKE
 
 
 ## 製品概要
