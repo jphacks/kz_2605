@@ -120,6 +120,21 @@ namespace JPHACKS2026
         public IEnumerator BullyTarget(Transform target, float duration)
         {
             lookTarget = target; lookAtPlayer = false; idle = Idle.None;
+            // 少年のモデルなら、仮の腕は作らずにアニメーションで手を突き出す
+            var boy = body.GetComponentInChildren<BoyMotion>();
+            if (boy != null)
+            {
+                var start = body.localRotation;
+                boy.bullying = true;
+                for (float e = 0; e < duration; e += Time.deltaTime)
+                {
+                    body.localRotation = start * Quaternion.Euler(8 + Mathf.Pow((Mathf.Sin(e * 7) + 1) * .5f, 3) * 22, 0, 0);
+                    yield return null;
+                }
+                body.localRotation = start;
+                boy.bullying = false;
+                yield break;
+            }
             var torso = body.Find("Torso");
             float h = torso != null ? torso.localScale.y / .36f : 1.15f;
             var shoulder = body.Find("Bully arm");

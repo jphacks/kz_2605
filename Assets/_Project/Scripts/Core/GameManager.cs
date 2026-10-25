@@ -59,7 +59,8 @@ namespace JPHACKS2026
             Subtitle = SubtitleView.Create();
             Choice = ChoicePanel.Create();
             Menu = MenuPanel.Create("Menu");
-            PauseMenu = MenuPanel.Create("PauseMenu", 50);
+            // ポーズメニューは暗幕（ScreenFader：100）より手前に描く。暗転中にポーズしても見えて、操作できるように
+            PauseMenu = MenuPanel.Create("PauseMenu", 110);
             narration.Bind(Subtitle);
             // 配信（LiveStreamConfig が設定されているときだけ）：Webの視聴ページとつなぎ、コメントを弾幕で流す
             if (!Application.isBatchMode && LiveStream.Create(rig.head) is { } live) DanmakuView.Create(live);

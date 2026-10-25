@@ -950,6 +950,7 @@ namespace JPHACKS2026.Editor
                 ch.idleAmplitude = 0.08f;
                 ch.idleSpeed = 5f + i;
                 ch.lookTarget = turtle.transform;
+                BoyModelSetup.ReplaceVisual(kid, i);
                 TriggerBox(kid, new Vector3(0, 0.65f, 0), new Vector3(0.6f, 1.3f, 0.6f));
                 kid.AddComponent<TouchTrigger>().minSpeed = 0.8f;
                 Anchor(kid, "beach.child." + i);

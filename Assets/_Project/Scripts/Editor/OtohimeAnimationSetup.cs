@@ -23,7 +23,7 @@ namespace JPHACKS2026.Editor
     public static class OtohimeAnimationSetup
     {
         const string ModelPath = "Assets/_Project/Art/Models/Characters/Princess_Hacks.fbx";
-        const string AnimFolder = "Assets/_Project/Art/Animations/Otohime";
+        internal const string AnimFolder = "Assets/_Project/Art/Animations/Otohime";
         const string BakedFolder = AnimFolder + "/Baked";
         const string ControllerPath = AnimFolder + "/Otohime.controller";
         const string HagoromoMaterialPath = "Assets/_Project/Art/Materials/Hagoromo.mat";
@@ -125,7 +125,7 @@ namespace JPHACKS2026.Editor
             EditorUtility.SetDirty(visual);
         }
 
-        static void UseGenericRig(string path)
+        internal static void UseGenericRig(string path)
         {
             var importer = (ModelImporter)AssetImporter.GetAtPath(path);
             if (importer == null) throw new FileNotFoundException("Model is missing", path);
@@ -156,13 +156,16 @@ namespace JPHACKS2026.Editor
             return controller;
         }
 
-        /// <summary>Mixamo の動きを乙姫の骨へ写して .anim に焼き込む。</summary>
-        static AnimationClip Bake(string state, string sourcePath, bool loop)
+        static AnimationClip Bake(string state, string sourcePath, bool loop) =>
+            Bake(ModelPath, BakedFolder + "/Otohime_" + state + ".anim", sourcePath, loop);
+
+        /// <summary>Mixamo の動きを乙姫の骨へ写して .anim に焼き込む。少年（Boy_Hacks.fbx）も同じ骨格なので BoyModelSetup からも使う。</summary>
+        internal static AnimationClip Bake(string targetModelPath, string path, string sourcePath, bool loop)
         {
             UseGenericRig(sourcePath);
             var source = AssetDatabase.LoadAllAssetsAtPath(sourcePath).OfType<AnimationClip>().FirstOrDefault(c => !c.name.StartsWith("__preview__"));
             var sourceModel = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
-            var princessModel = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+            var princessModel = AssetDatabase.LoadAssetAtPath<GameObject>(targetModelPath);
             if (source == null || sourceModel == null || princessModel == null) throw new FileNotFoundException("Animation or model is missing", sourcePath);
 
             var mixamo = Object.Instantiate(sourceModel);
@@ -206,7 +209,6 @@ namespace JPHACKS2026.Editor
                     }
                 }
 
-                var path = BakedFolder + "/Otohime_" + state + ".anim";
                 var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
                 if (clip == null) { clip = new AnimationClip(); AssetDatabase.CreateAsset(clip, path); }
                 clip.ClearCurves();
