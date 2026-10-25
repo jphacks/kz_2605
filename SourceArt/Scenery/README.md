@@ -1,5 +1,6 @@
 # 浜辺・海中のBlenderモデル
 
+- `BeachStick.blend`：砂浜の流木の棒（約1.1m）。曲がった軸、木目の溝とひび、樹皮の残り、節、折れた小枝、裂けた先端。`create_beach_stick.py`で再生成。Unityでは`SceneryDetails`が既存の`Driftwood`をこの棒に置き換え、拾って亀を叩けるようにします。
 - `FishingBoat.blend`：板を張り合わせた船殻、縁材、肋材、床板、腰掛け、櫂、櫂受け、釘、ロープ。
 - `ReefButterfly.blend` / `ReefClownfish.blend` / `ReefTang.blend`：3種類の魚。立体の胴体、配色模様、口、目、えら、各ヒレ、ヒレの条を作成。
 - `*_Preview.png`：Blenderでレンダリングしたプレビュー。
@@ -27,5 +28,6 @@
 
 ```powershell
 & 'C:\Program Files\Blender Foundation\Blender 4.3\blender.exe' --background --python SourceArt/Scenery/create_scenery.py
+& 'C:\Program Files\Blender Foundation\Blender 4.3\blender.exe' --background --python SourceArt/Scenery/create_beach_stick.py
 & 'C:\Program Files\Blender Foundation\Blender 4.3\blender.exe' --background --python SourceArt/Scenery/verify_scenery.py
 ```

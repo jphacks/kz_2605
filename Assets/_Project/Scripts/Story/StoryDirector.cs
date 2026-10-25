@@ -30,10 +30,19 @@ namespace JPHACKS2026
 
         bool skipNextIntro;
 
-        /// <summary>章の導入ナレーション。「直前の選択肢に戻る」で再開した直後の1回だけは省略し、すぐ選択肢へ進む。</summary>
+        const int IntroLinesOnSkip = 2;
+
+        /// <summary>章の導入ナレーション。選択肢から始める（チャプター選択・直前の選択肢に戻る）直後の1回だけは、最後の2つのセリフだけ流して選択肢へ進む。</summary>
         IEnumerator Intro(Line[] lines)
         {
-            if (skipNextIntro) { skipNextIntro = false; yield return Tween.Wait(0.5f); yield break; }
+            if (skipNextIntro)
+            {
+                // 選択肢から始めるときも、いきなり選択肢を出さずに直前の2つのセリフで状況を思い出させる
+                skipNextIntro = false;
+                yield return Tween.Wait(0.5f);
+                yield return Say(lines[Mathf.Max(0, lines.Length - IntroLinesOnSkip)..]);
+                yield break;
+            }
             yield return Say(lines);
         }
 
@@ -139,6 +148,9 @@ namespace JPHACKS2026
             yield return gm.GoToArea("beach");
             yield return Intro(StoryScript.BeachIntro);
 
+            // 一緒にいたずらするには、浜辺の木の棒を拾って亀を叩く
+            var turtleHit = A<TouchTrigger>("beach.turtle.hit");
+            turtleHit.requireStick = true;
             int r = -1;
             yield return Choose(new ChoiceDef
             {
@@ -149,7 +161,7 @@ namespace JPHACKS2026
                     new ChoiceDef.Option("助ける", "子どもたちを\n手で追い払う",
                         A<TouchTrigger>("beach.child.0"), A<TouchTrigger>("beach.child.1"), A<TouchTrigger>("beach.child.2")),
                     new ChoiceDef.Option("見過ごす", "亀から離れて\n立ち去る", A<LeaveTrigger>("beach.leave")),
-                    new ChoiceDef.Option("一緒にいたずらする", "亀を叩く", A<TouchTrigger>("beach.turtle.hit")),
+                    new ChoiceDef.Option("一緒にいたずらする", "木の棒で\n亀を叩く", turtleHit),
                 },
             }, v => r = v);
 
